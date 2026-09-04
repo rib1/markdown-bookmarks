@@ -56,7 +56,7 @@ Use stable IDs and preserve unknown fields when editing. Supported metadata
 includes `url`, `canonical_url`, `title`, `type`, `site`, `contexts`, `areas`,
 `projects`, `events`, `tags`, `status`, `priority`, `author`, `published_at`,
 `published_at_source`, `published_at_confidence`, `saved_at`,
-`first_opened_at`, `last_opened_at`, `save_count`, `save_history`, `summary`, and
+`first_saved_at`, `last_saved_at`, `save_count`, `save_history`, `summary`, and
 `related`.
 
 Keep these concepts distinct:
@@ -78,7 +78,7 @@ Keep these concepts distinct:
 - Ignore fragments and harmless trailing-slash differences when deduplicating.
 - Reuse the existing file and stable ID for an existing URL.
 - Merge tags, contexts, and plugin metadata; never overwrite existing tags.
-- Update `last_opened_at`, increment `save_count`, and append the timestamp to
+- Update `last_saved_at`, increment `save_count`, and append the timestamp to
   `save_history`.
 - Backfill new plugin metadata into legacy records.
 - Do not delete duplicates automatically; provide a preview-based command later.
@@ -90,6 +90,10 @@ Site plugins are URL-driven, deterministic, and independently testable.
 - GitHub: add site, repository, owner as author when absent, and `github` tag.
 - YouTube: add site, video type, video ID, and always add `youtube` tag.
 - Mural: add site, whiteboard type, `mural` tag, and default `work` context.
+- Confluence: add site, page type, space/page identifiers, `confluence` tag, and
+  default `work` context when no context is supplied.
+- Jira: add site, issue type, issue/project identifiers, `jira` tag, and default
+  `work` context when no context is supplied.
 
 Add plugins to the registry. Test new records, duplicate saves, and legacy
 metadata enrichment.

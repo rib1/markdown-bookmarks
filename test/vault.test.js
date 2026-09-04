@@ -68,6 +68,9 @@ test('saves tagged bookmark and finds it through the CLI index path', async () =
   const content = await fs.readFile(saved.file, 'utf8');
   assert.match(content, /- "work"/);
   assert.match(content, /- "database"/);
+  assert.match(content, /first_saved_at:/);
+  assert.match(content, /last_saved_at:/);
+  assert.doesNotMatch(content, /first_opened_at:|last_opened_at:/);
   const found = await findBookmarks('postgres', root);
   assert.equal(found.length, 1);
 });
@@ -167,4 +170,49 @@ test('Mural bookmarks default to work context', async () => {
   content = await fs.readFile(saved.file, 'utf8');
   assert.match(content, /- "work"/);
   assert.match(content, /- "personal"/);
+});
+
+test('applies Confluence and Jira site plugins', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-atlassian-'));
+  const confluence = await saveBookmark({
+    url: 'https://team.atlassian.net/wiki/spaces/ENG/pages/12345/Release+notes', title: 'Release notes'
+  }, root);
+  const jira = await saveBookmark({
+    url: 'https://team.atlassian.net/browse/ENG-42', title: 'Fix bookmark sync', tags: ['important']
+  }, root);
+  const confluenceContent = await fs.readFile(confluence.file, 'utf8');
+  const jiraContent = await fs.readFile(jira.file, 'utf8');
+  assert.match(confluenceContent, /site: confluence/);
+  assert.match(confluenceContent, /type: page/);
+  assert.match(confluenceContent, /contexts:\n  - "work"/);
+  assert.match(confluenceContent, /space_key: "ENG"/);
+  assert.match(confluenceContent, /page_id: "12345"/);
+  assert.match(confluenceContent, /- "confluence"/);
+  assert.match(jiraContent, /site: jira/);
+  assert.match(jiraContent, /type: issue/);
+  assert.match(jiraContent, /contexts:\n  - "work"/);
+  assert.match(jiraContent, /issue_key: "ENG-42"/);
+  assert.match(jiraContent, /project_key: "ENG"/);
+  assert.match(jiraContent, /- "jira"/);
+  assert.match(jiraContent, /- "important"/);
+
+  const personalJira = await saveBookmark({
+    url: 'https://team.atlassian.net/browse/ENG-43', title: 'Personal issue', contexts: ['personal']
+  }, root);
+  const personalContent = await fs.readFile(personalJira.file, 'utf8');
+  assert.match(personalContent, /contexts:\n  - "personal"/);
+  assert.doesNotMatch(personalContent, /contexts:\n  - "work"/);
+});
+
+test('backfills Jira metadata on duplicate save', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-jira-legacy-'));
+  const saved = await saveBookmark({ url: 'https://team.atlassian.net/browse/OPS-7', title: 'Incident' }, root);
+  let content = await fs.readFile(saved.file, 'utf8');
+  content = content.replace(/^type:.*\n|^site:.*\n|^issue_key:.*\n|^project_key:.*\n/gm, '');
+  await fs.writeFile(saved.file, content, 'utf8');
+  await saveBookmark({ url: 'https://team.atlassian.net/browse/OPS-7', title: 'Incident' }, root);
+  content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /site: "jira"/);
+  assert.match(content, /issue_key: "OPS-7"/);
+  assert.match(content, /project_key: "OPS"/);
 });

@@ -48,7 +48,7 @@ relate, review, or update their Markdown bookmark vault.
 - Suggest tags, contexts, projects, events, and relationships, distinguishing
   suggestions from confirmed edits.
 - Summarize a bookmark without replacing the user’s notes.
-- Produce review lists such as unread work links or recently accessed project
+- Produce review lists such as unread work links or recently saved project
   references.
 
 For canonical frontmatter fields and vault layout, read the vault’s `README.md`

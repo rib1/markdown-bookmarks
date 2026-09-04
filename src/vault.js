@@ -115,10 +115,10 @@ export async function saveBookmark(input, root = vaultRoot()) {
       const oldContexts = [...existing.content.matchAll(/^contexts:\n(?:  - ["']?([^"'\r\n]+)["']?\n|  \[\]\n)*/gm)].map((match) => match[1]).filter(Boolean);
       content = replaceList(content, 'contexts', [...new Set([...oldContexts, ...input.contexts])]);
     }
-    for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'published_at', 'published_at_source', 'published_at_confidence']) {
+    for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'space_key', 'page_id', 'issue_key', 'project_key', 'published_at', 'published_at_source', 'published_at_confidence']) {
       if (input[field]) content = replaceScalar(content, field, input[field]);
     }
-    content = replaceScalar(content, 'last_opened_at', now);
+    content = replaceScalar(content, 'last_saved_at', now);
     const previousSaveCount = Number(content.match(/^save_count:\s*(\d+)/m)?.[1]
       || content.match(/^access_count:\s*(\d+)/m)?.[1] || 0);
     content = content.replace(/^access_count:.*\n/m, '');
@@ -143,12 +143,16 @@ export async function saveBookmark(input, root = vaultRoot()) {
     input.site ? `site: ${input.site}` : '',
     input.repository ? `repository: ${JSON.stringify(input.repository)}` : '',
     input.video_id ? `video_id: ${JSON.stringify(input.video_id)}` : '',
+    input.space_key ? `space_key: ${JSON.stringify(input.space_key)}` : '',
+    input.page_id ? `page_id: ${JSON.stringify(input.page_id)}` : '',
+    input.issue_key ? `issue_key: ${JSON.stringify(input.issue_key)}` : '',
+    input.project_key ? `project_key: ${JSON.stringify(input.project_key)}` : '',
     input.author ? `author: ${JSON.stringify(input.author)}` : '',
     input.published_at ? `published_at: ${input.published_at}` : '',
     input.published_at_source ? `published_at_source: ${input.published_at_source}` : '',
     input.published_at_confidence ? `published_at_confidence: ${input.published_at_confidence}` : '',
-    `saved_at: ${now}`, `first_opened_at: ${input.first_opened_at || now}`,
-    `last_opened_at: ${input.last_opened_at || now}`, `save_count: ${input.save_count || 1}`,
+    `saved_at: ${now}`, `first_saved_at: ${input.first_saved_at || now}`,
+    `last_saved_at: ${input.last_saved_at || now}`, `save_count: ${input.save_count || 1}`,
     `save_history:`, yamlList([now]), `---`
   ].filter(Boolean).join('\n');
   const body = `${metadata}\n\n## Summary\n\n${input.summary || ''}\n`;

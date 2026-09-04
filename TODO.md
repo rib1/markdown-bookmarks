@@ -13,7 +13,7 @@ prototype sessions.
       bookmarks, preserving tags, metadata, notes, and access history.
 - [x] Add CLI tests for `find`, `open`, and time filters, including the new
       content-rich output format.
-- [ ] Update the public GitHub remote and push the latest commits.
+- [x] Add the public GitHub remote and push the latest commits.
 
 ## Browser capture
 
@@ -49,6 +49,7 @@ prototype sessions.
 - [ ] Add duplicate-save backfill tests specifically for YouTube metadata.
 - [ ] Document how to add a new site plugin.
 - [ ] Consider plugins for common article, PDF, podcast, and social sites.
+- [x] Add Confluence and Jira site metadata plugins and tests.
 
 ## Vault and data model
 

@@ -11,11 +11,9 @@ host does not need Node.js, Python, npm, or a database server.
 ## Get the application
 
 ```bash
-git clone https://github.com/YOUR-ACCOUNT/markdown-bookmarks.git
+git clone https://github.com/rib1/markdown-bookmarks.git
 cd markdown-bookmarks
 ```
-
-Replace the URL with the actual public repository URL after publication.
 
 ## Create the private vault
 
@@ -40,7 +38,15 @@ companion never handle Git credentials.
 You can also initialize the directory with the companion:
 
 ```bash
-docker compose run --rm -e BOOKMARK_VAULT=/vault bookmarkd node src/cli.js init
+export BOOKMARK_VAULT="$HOME/Documents/my-bookmarks"
+docker compose run --rm bookmarkd node src/cli.js init
+```
+
+On Windows PowerShell, set the host path before running Docker:
+
+```powershell
+$env:BOOKMARK_VAULT = "$HOME\Documents\my-bookmarks"
+docker compose run --rm bookmarkd node src/cli.js init
 ```
 
 The command creates the standard vault directories, a README, and a
@@ -52,7 +58,7 @@ if you do not want the skill copied into the vault.
 For an existing vault, install or refresh only the vault-local skill with:
 
 ```bash
-docker compose run --rm -e BOOKMARK_VAULT=/vault bookmarkd node src/cli.js skill install
+docker compose run --rm bookmarkd node src/cli.js skill install
 ```
 
 The public application’s `skills/` directory is only the source template; the

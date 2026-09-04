@@ -34,6 +34,42 @@ const plugins = [
       contexts: [...new Set([...(bookmark.contexts || []), 'work'])],
       tags: [...new Set([...(bookmark.tags || []), 'mural'])]
     })
+  },
+  {
+    name: 'confluence',
+    matches: (url) => (url.hostname === 'atlassian.net' || url.hostname.endsWith('.atlassian.net'))
+      && (url.pathname.includes('/wiki/') || url.pathname.includes('/display/')),
+    apply: (bookmark, url) => {
+      const spacesMatch = url.pathname.match(/\/spaces\/([^/]+)/i);
+      const displayMatch = url.pathname.match(/\/display\/([^/]+)/i);
+      const pageMatch = url.pathname.match(/\/pages\/(\d+)/i);
+      return {
+        ...bookmark,
+        site: 'confluence',
+        type: 'page',
+        contexts: bookmark.contexts?.length ? bookmark.contexts : ['work'],
+        space_key: bookmark.space_key || spacesMatch?.[1] || displayMatch?.[1],
+        page_id: bookmark.page_id || pageMatch?.[1],
+        tags: [...new Set([...(bookmark.tags || []), 'confluence'])]
+      };
+    }
+  },
+  {
+    name: 'jira',
+    matches: (url) => (url.hostname === 'atlassian.net' || url.hostname.endsWith('.atlassian.net'))
+      && url.pathname.startsWith('/browse/'),
+    apply: (bookmark, url) => {
+      const issueKey = url.pathname.match(/^\/browse\/([A-Z][A-Z0-9]+-\d+)/i)?.[1];
+      return {
+        ...bookmark,
+        site: 'jira',
+        type: 'issue',
+        contexts: bookmark.contexts?.length ? bookmark.contexts : ['work'],
+        issue_key: bookmark.issue_key || issueKey,
+        project_key: bookmark.project_key || issueKey?.split('-')[0],
+        tags: [...new Set([...(bookmark.tags || []), 'jira'])]
+      };
+    }
   }
 ];
 

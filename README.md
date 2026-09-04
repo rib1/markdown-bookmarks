@@ -17,4 +17,5 @@ Run all tests:
 docker compose run --rm all-tests
 ```
 
-See the [user guide](docs/USER-GUIDE.md) and [development instructions](docs/DEVELOPMENT.md).
+See the [user guide](docs/USER-GUIDE.md), [development instructions](docs/DEVELOPMENT.md),
+and [TODO list](TODO.md).

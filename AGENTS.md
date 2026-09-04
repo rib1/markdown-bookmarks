@@ -50,8 +50,7 @@ the CLI.
 ## Verification
 
 ```powershell
-docker compose build
-docker compose run --rm bookmarkd node --test test/vault.test.js
+docker compose run --rm all-tests
 ```
 
 For manual browser verification, start the service with `docker compose up`, load `extension/` as an unpacked extension, save a tagged page, inspect the mounted vault, and run the CLI inside the container.
