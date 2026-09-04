@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Markdown Bookmarks",
+  "version": "0.1.0",
+  "description": "Save the current tab to a local Markdown vault.",
+  "permissions": ["activeTab"],
+  "host_permissions": ["http://127.0.0.1:8787/*"],
+  "action": { "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js", "type": "module" }
+}

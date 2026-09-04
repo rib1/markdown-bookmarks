@@ -1,0 +1,9 @@
+# Personal vault and generated data must stay outside the public app repo.
+vault/
+*.sqlite
+*.sqlite3
+.env
+.env.*
+node_modules/
+dist/
+build/
