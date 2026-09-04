@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { saveBookmark, findBookmarks, initVault, vaultRoot } from './vault.js';
+import { saveBookmark, findBookmarks, initVault, installVaultSkill, vaultRoot } from './vault.js';
 import { spawn } from 'node:child_process';
 
 const [command, ...args] = process.argv.slice(2);
@@ -26,6 +26,10 @@ if (command === 'init') {
   console.log(`Vault ready: ${root}`);
   if (!args.includes('--no-skill')) console.log('LLM skill installed: .codex/skills/markdown-bookmark-vault/SKILL.md');
   console.log('Next: git -C "' + root + '" init');
+} else if (command === 'skill' && args[0] === 'install') {
+  const root = option('--path') || vaultRoot();
+  const target = await installVaultSkill(root);
+  console.log(`LLM skill installed in vault: ${target}`);
 } else if (command === 'save') {
   const url = option('--url');
   if (!url) throw new Error('Usage: npm run bookmark -- save --url URL --title TITLE --tags tag1,tag2');
@@ -51,5 +55,5 @@ if (command === 'init') {
     spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
   }
 } else {
-  console.log('Commands: init [--path PATH] [--no-skill], save --url URL [--title TITLE] [--tags tag1,tag2], find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD], open QUERY [--dry-run]');
+  console.log('Commands: init [--path PATH] [--no-skill], skill install [--path PATH], save --url URL [--title TITLE] [--tags tag1,tag2], find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD], open QUERY [--dry-run]');
 }

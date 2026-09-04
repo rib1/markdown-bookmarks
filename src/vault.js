@@ -1,9 +1,18 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { applySitePlugins } from './site-plugins.js';
 
 export function vaultRoot() {
   return process.env.BOOKMARK_VAULT || process.env.VAULT_PATH || path.resolve('vault');
+}
+
+export async function installVaultSkill(root) {
+  const source = process.env.SKILL_SOURCE || path.resolve('skills', 'markdown-bookmark-vault', 'SKILL.md');
+  const target = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.copyFile(source, target);
+  return target;
 }
 
 export async function initVault(root, { installSkill = true } = {}) {
@@ -35,10 +44,7 @@ export async function initVault(root, { installSkill = true } = {}) {
     await fs.writeFile(readme, vaultReadme, 'utf8');
   }
   if (installSkill) {
-    const source = process.env.SKILL_SOURCE || path.resolve('skills', 'markdown-bookmark-vault', 'SKILL.md');
-    const target = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
-    await fs.mkdir(path.dirname(target), { recursive: true });
-    await fs.copyFile(source, target);
+    await installVaultSkill(root);
   }
   return root;
 }
@@ -73,7 +79,21 @@ function replaceScalar(content, field, value) {
   return pattern.test(content) ? content.replace(pattern, line) : content.replace(/^---\n/, `---\n${line}\n`);
 }
 
+function replaceList(content, field, values) {
+  const block = `${field}:\n${yamlList(values)}\n`;
+  const pattern = new RegExp(`^${field}:\\n(?:  - .*\\n|  \\[\\]\\n)*`, 'm');
+  if (pattern.test(content)) return content.replace(pattern, block);
+  return content.replace(/^tags:/m, `${block}tags:`);
+}
+
+function readList(content, field) {
+  const match = content.match(new RegExp(`^${field}:\\n((?:  - .*\\n|  \\[\\]\\n)*)`, 'm'));
+  if (!match) return [];
+  return [...match[1].matchAll(/^  - ["']?([^"'\r\n]+)["']?$/gm)].map((item) => item[1]);
+}
+
 export async function saveBookmark(input, root = vaultRoot()) {
+  input = applySitePlugins(input);
   const now = input.saved_at || new Date().toISOString();
   const id = input.id || crypto.randomUUID();
   const title = input.title || input.url;
@@ -84,16 +104,48 @@ export async function saveBookmark(input, root = vaultRoot()) {
     const oldTags = [...existing.content.matchAll(/^  - ["']?([^"'\r\n]+)["']?$/gm)].map((match) => match[1]);
     const mergedTags = [...new Set([...oldTags, ...tags])];
     let content = existing.content;
-    content = content.replace(/^tags:\n(?:  - .*\n|  \[\]\n)*/m, `tags:\n${yamlList(mergedTags)}\n`);
+    content = replaceList(content, 'tags', mergedTags);
+    if (input.contexts?.length) {
+      const oldContexts = [...existing.content.matchAll(/^contexts:\n(?:  - ["']?([^"'\r\n]+)["']?\n|  \[\]\n)*/gm)].map((match) => match[1]).filter(Boolean);
+      content = replaceList(content, 'contexts', [...new Set([...oldContexts, ...input.contexts])]);
+    }
+    for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'published_at', 'published_at_source', 'published_at_confidence']) {
+      if (input[field]) content = replaceScalar(content, field, input[field]);
+    }
     content = replaceScalar(content, 'last_opened_at', now);
-    content = replaceScalar(content, 'access_count', Number(content.match(/^access_count:\s*(\d+)/m)?.[1] || 0) + 1);
+    const previousSaveCount = Number(content.match(/^save_count:\s*(\d+)/m)?.[1]
+      || content.match(/^access_count:\s*(\d+)/m)?.[1] || 0);
+    content = content.replace(/^access_count:.*\n/m, '');
+    let saveHistory = readList(content, 'save_history');
+    if (!saveHistory.length) {
+      const originalSavedAt = content.match(/^saved_at:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
+      saveHistory = originalSavedAt ? [originalSavedAt] : [];
+    }
+    saveHistory.push(now);
+    content = replaceScalar(content, 'save_count', Math.max(previousSaveCount + 1, saveHistory.length));
+    content = replaceList(content, 'save_history', saveHistory);
     await fs.writeFile(existing.file, content, 'utf8');
     return { id: existing.content.match(/^id:\s*(.+)$/m)?.[1], file: existing.file, title, tags: mergedTags, duplicate: true };
   }
   const dir = path.join(root, 'bookmarks', now.slice(0, 7).replace('-', path.sep));
   await fs.mkdir(dir, { recursive: true });
   const file = path.join(dir, `${id}-${slug(title)}.md`);
-  const body = `---\nid: ${id}\nurl: ${JSON.stringify(input.url)}\ncanonical_url: ${JSON.stringify(canonicalUrl)}\ntitle: ${JSON.stringify(title)}\ntags:\n${yamlList(tags)}\nsaved_at: ${now}\nfirst_opened_at: ${input.first_opened_at || now}\nlast_opened_at: ${input.last_opened_at || now}\naccess_count: ${input.access_count || 1}\n---\n\n## Summary\n\n${input.summary || ''}\n`;
+  const contexts = [...new Set((input.contexts || []).map(String).filter(Boolean))];
+  const metadata = [
+    `---`, `id: ${id}`, `url: ${JSON.stringify(input.url)}`, `canonical_url: ${JSON.stringify(canonicalUrl)}`,
+    `title: ${JSON.stringify(title)}`, `type: ${input.type || 'bookmark'}`, `contexts:`, yamlList(contexts), `tags:`, yamlList(tags),
+    input.site ? `site: ${input.site}` : '',
+    input.repository ? `repository: ${JSON.stringify(input.repository)}` : '',
+    input.video_id ? `video_id: ${JSON.stringify(input.video_id)}` : '',
+    input.author ? `author: ${JSON.stringify(input.author)}` : '',
+    input.published_at ? `published_at: ${input.published_at}` : '',
+    input.published_at_source ? `published_at_source: ${input.published_at_source}` : '',
+    input.published_at_confidence ? `published_at_confidence: ${input.published_at_confidence}` : '',
+    `saved_at: ${now}`, `first_opened_at: ${input.first_opened_at || now}`,
+    `last_opened_at: ${input.last_opened_at || now}`, `save_count: ${input.save_count || 1}`,
+    `save_history:`, yamlList([now]), `---`
+  ].filter(Boolean).join('\n');
+  const body = `${metadata}\n\n## Summary\n\n${input.summary || ''}\n`;
   await fs.writeFile(file, body, 'utf8');
   return { id, file, title, tags };
 }

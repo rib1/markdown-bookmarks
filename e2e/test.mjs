@@ -55,7 +55,9 @@ try {
   assert.match(content, /- "e2e"/);
   assert.match(content, /- "work"/);
   assert.match(content, /- "duplicate"/);
-  assert.match(content, /access_count: 2/);
+  assert.match(content, /save_count: 2/);
+  const saveHistory = content.match(/^save_history:\n((?:  - .*\n)+)/m)?.[1];
+  assert.equal((saveHistory?.match(/^  - /gm) || []).length, 2);
   // Verify that the CLI can resolve the saved bookmark for browser opening.
   const opened = await exec('node', ['src/cli.js', 'open', testUrl, '--dry-run'], { cwd: '/e2e', env: { ...process.env, BOOKMARK_VAULT: vault } });
   assert.equal(opened.stdout.trim(), testUrl);

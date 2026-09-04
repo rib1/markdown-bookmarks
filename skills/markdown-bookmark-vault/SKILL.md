@@ -51,5 +51,6 @@ relate, review, or update their Markdown bookmark vault.
 - Produce review lists such as unread work links or recently accessed project
   references.
 
-For canonical frontmatter fields and vault layout, read `docs/PLAN.md` in the
-application repository when available.
+For canonical frontmatter fields and vault layout, read the vault’s `README.md`
+and inspect existing bookmark files. Do not require access to the application
+repository to use this skill.

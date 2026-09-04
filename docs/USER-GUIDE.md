@@ -48,6 +48,15 @@ overwriting existing files. It also installs the generic vault-management LLM
 skill at `.codex/skills/markdown-bookmark-vault/SKILL.md`. Use `--no-skill` if
 you do not want the skill copied into the vault.
 
+For an existing vault, install or refresh only the vault-local skill with:
+
+```bash
+docker compose run --rm -e BOOKMARK_VAULT=/vault bookmarkd node src/cli.js skill install
+```
+
+The public application’s `skills/` directory is only the source template; the
+usable copy for your bookmarks is inside the private vault.
+
 ## Use the vault with an LLM
 
 The repository includes a reusable Codex skill at
@@ -90,6 +99,24 @@ The same configured vault is used by the companion service and its CLI.
 
 The current prototype is not yet packaged for a browser store.
 
+## Reload the extension after changes
+
+1. Keep the companion running:
+
+   ```powershell
+   docker compose up -d --build --force-recreate bookmarkd
+   ```
+
+2. Open `chrome://extensions`.
+3. Enable **Developer mode**.
+4. Find **Markdown Bookmarks** and click **Reload**.
+5. If it is not installed, choose **Load unpacked** and select the repository's
+   `extension` directory.
+
+To test metadata extraction, open a real article page containing author and
+publication-date metadata. Click the extension, choose a context, add tags,
+and save the page. Inspect the generated Markdown file in the private vault.
+
 ## Save a bookmark
 
 1. Open the page to keep.
@@ -104,6 +131,11 @@ my-bookmarks/bookmarks/YYYY/MM/<id>-page-title.md
 ```
 
 The file is ordinary Markdown and can be opened without this application.
+
+GitHub bookmarks receive repository and owner metadata when available. YouTube
+bookmarks are classified as videos and always receive the `youtube` tag.
+Mural bookmarks are classified as whiteboards and default to the `work`
+context.
 
 ## Search from the CLI
 
@@ -150,6 +182,12 @@ vault:
 
 ```bash
 docker compose run --rm e2e
+```
+
+To run all automated tests—vault, CLI, and Chrome extension—in one command:
+
+```powershell
+docker compose run --rm all-tests
 ```
 
 ## Troubleshooting

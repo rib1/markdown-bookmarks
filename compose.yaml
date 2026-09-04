@@ -20,3 +20,11 @@ services:
       VAULT_PATH: /vault
     volumes:
       - ./test-data:/vault
+
+  all-tests:
+    build:
+      context: .
+      dockerfile: e2e/Dockerfile
+    volumes:
+      - ./test-data:/vault
+    command: ["sh", "all-tests.sh"]

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { saveBookmark, findBookmarks, initVault, vaultRoot } from '../src/vault.js';
+import { saveBookmark, findBookmarks, initVault, installVaultSkill, vaultRoot } from '../src/vault.js';
 
 test('uses the Docker VAULT_PATH when BOOKMARK_VAULT is not set', { concurrency: false }, () => {
   const previousBookmarkVault = process.env.BOOKMARK_VAULT;
@@ -46,6 +46,20 @@ test('initializes a vault and installs the LLM skill without overwriting README'
   }
 });
 
+test('installs the LLM skill inside the selected vault', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-skill-'));
+  const previousSkillSource = process.env.SKILL_SOURCE;
+  process.env.SKILL_SOURCE = path.resolve('skills', 'markdown-bookmark-vault', 'SKILL.md');
+  try {
+    const target = await installVaultSkill(root);
+    assert.equal(target, path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md'));
+    assert.equal((await fs.stat(target)).isFile(), true);
+  } finally {
+    if (previousSkillSource === undefined) delete process.env.SKILL_SOURCE;
+    else process.env.SKILL_SOURCE = previousSkillSource;
+  }
+});
+
 test('saves tagged bookmark and finds it through the CLI index path', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-'));
   const saved = await saveBookmark({ url: 'https://example.test/postgres', title: 'Postgres Guide', tags: ['work', 'database'] }, root);
@@ -65,7 +79,24 @@ test('reuses an existing bookmark and merges tags on duplicate save', async () =
   const content = await fs.readFile(first.file, 'utf8');
   assert.match(content, /- "first"/);
   assert.match(content, /- "second"/);
-  assert.match(content, /access_count: 2/);
+  assert.match(content, /save_count: 2/);
+  assert.match(content, /save_history:\n(?:  - .*\n){2}/);
+  assert.doesNotMatch(content, /access_count:/);
+});
+
+test('records each save timestamp in save history', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-history-'));
+  const saved = await saveBookmark({ url: 'https://example.test/history', title: 'History' }, root);
+  const first = await fs.readFile(saved.file, 'utf8');
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  await saveBookmark({ url: 'https://example.test/history', title: 'History' }, root);
+  const second = await fs.readFile(saved.file, 'utf8');
+  assert.match(first, /save_count: 1/);
+  assert.match(second, /save_count: 2/);
+  const firstHistory = first.match(/^save_history:\n((?:  - .*\n)+)/m)?.[1];
+  const secondHistory = second.match(/^save_history:\n((?:  - .*\n)+)/m)?.[1];
+  assert.equal((secondHistory?.match(/^  - /gm) || []).length, 2);
+  assert.notEqual(firstHistory, secondHistory);
 });
 
 test('filters bookmark search by saved time', async () => {
@@ -74,4 +105,64 @@ test('filters bookmark search by saved time', async () => {
   await saveBookmark({ id: 'new', url: 'https://example.test/new', title: 'Amiga new', saved_at: new Date().toISOString() }, root);
   assert.equal((await findBookmarks('amiga', root, { savedSince: '2025-01-01' })).length, 1);
   assert.equal((await findBookmarks('amiga', root, { savedWithin: 'year' })).length, 1);
+});
+
+test('stores non-LLM page metadata and context', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-metadata-'));
+  const saved = await saveBookmark({
+    url: 'https://example.test/article', title: 'Article', contexts: ['work'], tags: ['reference'],
+    author: 'Example Author', published_at: '2026-08-28', published_at_source: 'article-meta',
+    published_at_confidence: 'high', summary: 'A deterministic page summary.'
+  }, root);
+  const content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /contexts:\n  - "work"/);
+  assert.match(content, /author: "Example Author"/);
+  assert.match(content, /published_at: 2026-08-28/);
+  assert.match(content, /published_at_source: article-meta/);
+  assert.match(content, /A deterministic page summary/);
+});
+
+test('applies GitHub and YouTube site plugins', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-sites-'));
+  const github = await saveBookmark({ url: 'https://github.com/rib1/uade-docker/tree/main/.agents', title: 'UADE agents', tags: ['amiga'] }, root);
+  const youtube = await saveBookmark({ url: 'https://www.youtube.com/watch?v=abc123', title: 'Amiga demo', tags: ['music'] }, root);
+  const githubContent = await fs.readFile(github.file, 'utf8');
+  const youtubeContent = await fs.readFile(youtube.file, 'utf8');
+  assert.match(githubContent, /type: bookmark/);
+  assert.match(githubContent, /site: github/);
+  assert.match(githubContent, /repository: "rib1\/uade-docker"/);
+  assert.match(githubContent, /author: "rib1"/);
+  assert.match(githubContent, /- "github"/);
+  assert.match(youtubeContent, /type: video/);
+  assert.match(youtubeContent, /site: youtube/);
+  assert.match(youtubeContent, /video_id: "abc123"/);
+  assert.match(youtubeContent, /- "youtube"/);
+});
+
+test('backfills site metadata when a legacy bookmark is saved again', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-legacy-site-'));
+  const saved = await saveBookmark({ url: 'https://github.com/rib1/uade-docker', title: 'UADE' }, root);
+  let content = await fs.readFile(saved.file, 'utf8');
+  content = content.replace(/^type:.*\n|^site:.*\n|^repository:.*\n|^author:.*\n/gm, '');
+  await fs.writeFile(saved.file, content, 'utf8');
+  await saveBookmark({ url: 'https://github.com/rib1/uade-docker', title: 'UADE' }, root);
+  content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /site: "github"/);
+  assert.match(content, /repository: "rib1\/uade-docker"/);
+  assert.match(content, /author: "rib1"/);
+});
+
+test('Mural bookmarks default to work context', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-mural-'));
+  const saved = await saveBookmark({ url: 'https://app.mural.co/t/team123/m/team456', title: 'Project workshop' }, root);
+  let content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /type: whiteboard/);
+  assert.match(content, /site: mural/);
+  assert.match(content, /contexts:\n  - "work"/);
+  assert.match(content, /- "mural"/);
+
+  await saveBookmark({ url: 'https://app.mural.co/t/team123/m/team456', title: 'Project workshop', contexts: ['personal'] }, root);
+  content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /- "work"/);
+  assert.match(content, /- "personal"/);
 });

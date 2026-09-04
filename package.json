@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "bookmark": "node src/cli.js",
-    "test": "node --test"
+    "test": "node --test test/vault.test.js test/cli.test.js"
   }
 }
