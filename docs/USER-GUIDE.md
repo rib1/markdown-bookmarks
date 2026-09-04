@@ -43,10 +43,11 @@ You can also initialize the directory with the companion:
 docker compose run --rm -e BOOKMARK_VAULT=/vault bookmarkd node src/cli.js init
 ```
 
-The command creates the standard vault directories and a README without
-overwriting existing files. It also installs the generic vault-management LLM
-skill at `.codex/skills/markdown-bookmark-vault/SKILL.md`. Use `--no-skill` if
-you do not want the skill copied into the vault.
+The command creates the standard vault directories, a README, and a
+`.gitattributes` file that normalizes text files to Unix LF line endings. It
+does not overwrite existing files. It also installs the generic vault-management
+LLM skill at `.codex/skills/markdown-bookmark-vault/SKILL.md`. Use `--no-skill`
+if you do not want the skill copied into the vault.
 
 For an existing vault, install or refresh only the vault-local skill with:
 

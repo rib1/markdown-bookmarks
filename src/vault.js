@@ -18,6 +18,12 @@ export async function installVaultSkill(root) {
 export async function initVault(root, { installSkill = true } = {}) {
   await Promise.all(['bookmarks', 'projects', 'events', 'assets', 'views'].map((name) =>
     fs.mkdir(path.join(root, name), { recursive: true })));
+  const attributes = path.join(root, '.gitattributes');
+  try {
+    await fs.access(attributes);
+  } catch {
+    await fs.writeFile(attributes, '* text=auto eol=lf\n', 'utf8');
+  }
   const readme = path.join(root, 'README.md');
   try {
     await fs.access(readme);

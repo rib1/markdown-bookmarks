@@ -31,7 +31,9 @@ test('initializes a vault and installs the LLM skill without overwriting README'
       assert.equal(stat.isDirectory(), true);
     }
     const readme = path.join(root, 'README.md');
+    const attributes = path.join(root, '.gitattributes');
     const skill = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
+    assert.equal(await fs.readFile(attributes, 'utf8'), '* text=auto eol=lf\n');
     const readmeContent = await fs.readFile(readme, 'utf8');
     assert.match(readmeContent, /# Private bookmark vault/);
     assert.match(readmeContent, /`bookmarks\/`/);

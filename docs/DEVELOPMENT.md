@@ -36,6 +36,7 @@ and is mounted at `/vault` inside containers.
 
 ```text
 private-vault/
+├── .gitattributes                  # normalize text files to LF
 ├── README.md
 ├── bookmarks/YYYY/MM/<stable-id>-<slug>.md
 ├── projects/<stable-id>-<slug>.md
