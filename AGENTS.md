@@ -12,6 +12,7 @@ Build a personal, local-first bookmark system that saves browser tabs as searcha
 - The vault is the source of truth. Any database or search index must be disposable and rebuildable from Markdown.
 - Development dependencies are provided through Docker only. Do not require Node, Python, npm, or another runtime on the developer host.
 - The distributed companion must be a standalone executable that runs without Docker or a language runtime.
+- Prefer one self-contained, signed companion binary over a runtime installer or a collection of host-installed packages.
 - The companion workflow must work on both Windows and macOS.
 - Use Docker Compose for development and tests. The released companion runs directly on Windows and macOS.
 

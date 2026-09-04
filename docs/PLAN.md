@@ -11,6 +11,7 @@ The application repository is public. The user’s vault is a separate private r
 - Personal-first CLI companion; no web UI for the initial product.
 - Docker is used for development and CI only.
 - The released companion is a standalone Windows/macOS executable and does not require Docker or a language runtime.
+- The released companion should be as self-contained as practical: one signed binary with the CLI, localhost API, vault operations, search, and configuration included.
 - Git is used by the user on the host for versioning and synchronization.
 - Markdown with YAML frontmatter is the canonical data format.
 - SQLite/search indexes may be added later but must be regenerable.
@@ -99,6 +100,7 @@ related: []
 ### M5 — Cross-platform packaging
 
 - Select a compiled companion implementation, preferably Go or Rust, producing standalone Windows and macOS binaries.
+- Package the CLI and localhost service together as one executable; avoid runtime installers and external language dependencies.
 - Build release binaries in Docker for reproducibility.
 - Verify the standalone binary without Docker on Windows and macOS.
 - Verify Docker Compose and bind mounts on Windows and macOS.

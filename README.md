@@ -2,6 +2,8 @@
 
 Local-first browser bookmarks stored as Markdown files in a Git-versioned vault.
 
+For host installation and usage, see the [user guide](docs/USER-GUIDE.md).
+
 ## Run the development companion
 
 Development uses Docker; the released companion will be a standalone binary.
@@ -31,9 +33,24 @@ docker compose exec bookmarkd node --test test/vault.test.js
 docker compose down
 ```
 
+Run the real Chrome extension test entirely in Docker:
+
+```powershell
+docker compose run --rm e2e
+```
+
 The browser development test is: open a page, load the extension, enter `work,database`,
 click save, inspect the generated file under `vault/bookmarks/`, then run:
 
 ```powershell
 docker compose exec bookmarkd node src/cli.js find postgres
 ```
+
+Open a saved bookmark in the default browser:
+
+```powershell
+docker compose exec bookmarkd node src/cli.js open postgres
+```
+
+Use `--dry-run` in scripts or tests to print the resolved URL without opening
+the browser.

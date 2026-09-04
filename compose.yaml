@@ -8,3 +8,15 @@ services:
       PORT: 8787
     volumes:
       - ${BOOKMARK_VAULT:-./vault}:/vault
+
+  e2e:
+    build:
+      context: .
+      dockerfile: e2e/Dockerfile
+    depends_on:
+      - bookmarkd
+    environment:
+      API_URL: http://bookmarkd:8787
+      VAULT_PATH: /vault
+    volumes:
+      - ${BOOKMARK_VAULT:-./vault}:/vault
