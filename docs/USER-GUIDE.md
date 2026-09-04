@@ -37,6 +37,27 @@ git clone git@github.com:YOUR-ACCOUNT/private-bookmarks.git ../my-bookmarks
 Configure Git authentication separately on the host. The extension and
 companion never handle Git credentials.
 
+You can also initialize the directory with the companion:
+
+```bash
+docker compose run --rm -e BOOKMARK_VAULT=/vault bookmarkd node src/cli.js init
+```
+
+The command creates the standard vault directories and a README without
+overwriting existing files. It also installs the generic vault-management LLM
+skill at `.codex/skills/markdown-bookmark-vault/SKILL.md`. Use `--no-skill` if
+you do not want the skill copied into the vault.
+
+## Use the vault with an LLM
+
+The repository includes a reusable Codex skill at
+`skills/markdown-bookmark-vault/`. Copy that directory into your local Codex
+skills directory, then open the private vault in the same workspace or provide
+its path when asking the LLM to work with it.
+
+The skill preserves stable IDs, distinguishes suggestions from confirmed edits,
+protects private content, and avoids unrequested Git commits or pushes.
+
 ## Start the companion
 
 Windows PowerShell:
@@ -56,6 +77,8 @@ docker compose up --build
 The local API listens at `http://127.0.0.1:8787`. Keep the terminal open, or
 start it in the background with `docker compose up --build -d`. Stop it with
 `docker compose down`.
+
+The same configured vault is used by the companion service and its CLI.
 
 ## Install the extension
 
@@ -93,7 +116,7 @@ docker compose exec bookmarkd node src/cli.js find database
 The same command works in a macOS/Linux shell. Search covers the Markdown
 bookmark content, including URLs, titles, tags, and summaries.
 
-Open the first matching bookmark in the host’s default browser:
+Open the first matching bookmark in the host's default browser:
 
 ```powershell
 docker compose exec bookmarkd node src/cli.js open database
@@ -122,7 +145,8 @@ git pull --rebase
 ## Run the browser end-to-end test
 
 This uses a separate Docker image containing Chrome and Playwright and writes
-synthetic data to the configured development vault:
+synthetic data to the ignored `test-data/` directory, never to your private
+vault:
 
 ```bash
 docker compose run --rm e2e

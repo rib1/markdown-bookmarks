@@ -1,0 +1,4 @@
+interface:
+  display_name: Markdown Bookmark Vault
+  short_description: Safely manage a Markdown bookmark vault
+  default_prompt: Help me search, organize, summarize, or relate items in my Markdown bookmark vault while preserving my files and metadata.

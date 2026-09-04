@@ -1,5 +1,6 @@
 document.querySelector('#form').addEventListener('submit', async (event) => {
   event.preventDefault();
+  document.querySelector('#result').textContent = '';
   const params = new URLSearchParams(location.search);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const capturedTab = params.has('test-url')

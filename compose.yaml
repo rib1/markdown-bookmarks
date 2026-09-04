@@ -19,4 +19,4 @@ services:
       API_URL: http://bookmarkd:8787
       VAULT_PATH: /vault
     volumes:
-      - ${BOOKMARK_VAULT:-./vault}:/vault
+      - ./test-data:/vault

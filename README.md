@@ -4,6 +4,9 @@ Local-first browser bookmarks stored as Markdown files in a Git-versioned vault.
 
 For host installation and usage, see the [user guide](docs/USER-GUIDE.md).
 
+Initialize a vault from the Docker development environment with `init`; this
+also installs the vault-management LLM skill.
+
 ## Run the development companion
 
 Development uses Docker; the released companion will be a standalone binary.
