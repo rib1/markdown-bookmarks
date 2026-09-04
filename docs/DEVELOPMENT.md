@@ -146,6 +146,9 @@ application repository with:
 docker compose run --rm all-tests
 ```
 
+GitHub Dependabot checks npm, Docker, and GitHub Actions dependencies weekly.
+The `Credential scan` workflow runs Gitleaks on every push and pull request.
+
 Tests must cover vault initialization, skill installation, CLI commands and
 path resolution, save/find/open behavior, duplicate merging, time filters,
 GitHub/YouTube/Mural plugins, legacy enrichment, Chrome capture, and Markdown
