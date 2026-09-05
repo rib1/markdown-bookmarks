@@ -13,7 +13,12 @@ const [command, ...args] = process.argv.slice(2);
 
 function option(name) {
   const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : undefined;
+  if (index >= 0) {
+    const value = args[index + 1];
+    return value?.startsWith('--') ? undefined : value;
+  }
+  const inline = args.find((argument) => argument.startsWith(`${name}=`));
+  return inline?.slice(name.length + 1) || undefined;
 }
 
 function positionalArgument(valueOptions = []) {
@@ -49,7 +54,7 @@ function printOpenHelp() {
 Find a bookmark and open its HTTP/HTTPS URL.
 
 Options:
-  --pick NUMBER     Select a numbered result when multiple bookmarks match.
+  --pick NUMBER     Skip the menu and directly open a numbered search result.
   --with BROWSER   Use a browser alias, application name, executable, or executable path.
   --dry-run         Print the selected URL without launching a browser.
   --help, -h        Show this help.
@@ -58,12 +63,20 @@ Browser aliases:
   chrome, edge, firefox, brave
   safari            macOS only
 
+Multiple matches:
+  Without --pick, an interactive terminal displays a numbered menu and asks
+  you to choose. With --pick NUMBER, that menu is skipped and the numbered
+  match for the current query opens directly. --pick=NUMBER is also accepted.
+
 Examples:
   npm run bookmark -- open database
   npm run bookmark -- open database --pick 2
   npm run bookmark -- open database --with firefox
   npm run bookmark -- open database --with "Google Chrome"
   npm run bookmark -- open database --dry-run
+
+Open a bookmark by its stable ID:
+  npm run bookmark -- open 550e8400-e29b-41d4-a716-446655440000
 
 Search first, then open the third matching link:
   npm run bookmark -- find database
@@ -107,10 +120,9 @@ function pickedResult(results, value) {
   return results[pick - 1];
 }
 
-async function chooseOpenResult(results) {
+async function chooseOpenResult(results, requestedPick) {
   if (!results.length) return undefined;
   const sorted = sortSearchResults(results);
-  const requestedPick = option('--pick');
   if (requestedPick !== undefined) return pickedResult(sorted, requestedPick);
   if (sorted.length === 1) return sorted[0];
 
@@ -157,10 +169,13 @@ if (command === 'help' || command === '--help' || command === '-h') {
     const hostVaultPath = process.env.BOOKMARK_RESULTS_HOST_VAULT;
     const pageUrl = hostVaultPath ? hostSearchResultsFileUrl(page.token, hostVaultPath) : page.fileUrl;
     if (args.includes('--dry-run')) console.log(pageUrl);
-    else if (hostVaultPath) console.log(`Open search results: ${pageUrl}`);
     else {
-      await openInBrowser(pageUrl, selectedBrowser);
-      console.log(`Opened ${page.count} bookmark result${page.count === 1 ? '' : 's'} in the browser: ${pageUrl}`);
+      console.log('Search results file:');
+      console.log(pageUrl);
+      if (!hostVaultPath) {
+        await openInBrowser(pageUrl, selectedBrowser);
+        console.log(`Opened ${page.count} bookmark result${page.count === 1 ? '' : 's'} in the browser.`);
+      }
     }
   } else {
     for (const result of results) printSearchResult(result);
@@ -176,7 +191,7 @@ if (command === 'help' || command === '--help' || command === '-h') {
       throw new Error('--with requires a browser name or executable');
     }
     if (!query) throw new Error('Usage: npm run bookmark -- open QUERY [--pick NUMBER] [--with BROWSER] [--dry-run]');
-    const result = await chooseOpenResult(await findBookmarks(query));
+    const result = await chooseOpenResult(await findBookmarks(query), option('--pick'));
     if (!result) throw new Error(`No bookmark found for: ${query}`);
     const url = result.content.match(/^url:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
     if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Bookmark has no safe HTTP URL: ${result.file}`);

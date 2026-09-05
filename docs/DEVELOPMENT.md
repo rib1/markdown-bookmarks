@@ -153,8 +153,8 @@ open QUERY [--pick NUMBER] [--with BROWSER] [--dry-run]
 
 `find` returns file path, URL, and full Markdown content. With `--browser`, it
 creates a static, safely escaped HTML page in the vault's ignored
-`views/.search-results/` directory. Native mode opens its `file://` URL and
-prints the link; Docker prints the corresponding host-side `file://` URL.
+`views/.search-results/` directory. Native mode prints its `file://` URL before
+opening it; Docker prints the corresponding host-side `file://` URL.
 Server startup removes generated pages older than 24 hours. `--dry-run` prints
 the page URL without launching it.
 

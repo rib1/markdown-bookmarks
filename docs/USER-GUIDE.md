@@ -194,8 +194,9 @@ npm run bookmark -- help
 ```
 
 This lists initialization, saving, searching, browser-page generation, and
-link-opening commands. Its examples show how to search first, open a numbered
-result, choose another browser, or open all matches as a browser page.
+link-opening commands. Its examples show how to open by stable bookmark ID,
+search first and open a numbered result, choose another browser, or open all
+matches as a browser page.
 
 For the detailed link-launch reference, run:
 
@@ -231,7 +232,8 @@ To view useful metadata for all matches in a temporary browser page, use:
 npm run bookmark -- find database --browser
 ```
 
-Native mode opens the page directly and also prints its `file://` link. With
+Native mode prints the generated `file://` link on its own line before opening
+the page. This leaves a copyable link even if browser launching fails. With
 Docker, keep `bookmarkd` running and run:
 
 ```powershell
@@ -266,9 +268,10 @@ Docker cannot launch applications on the host.
 If several bookmarks match, `open` shows a numbered list and asks which one to
 open. Enter a short number such as `2`; there is no need to type the bookmark
 ID. For scripts or other non-interactive use, select the same numbered result
-with `open QUERY --pick 2`. Results are sorted by title so the numbering is
-stable. Use `open QUERY --dry-run` to print the selected URL without launching
-a browser.
+with `open QUERY --pick 2`. Supplying `--pick` skips the menu and opens that
+result directly; `--pick=2` is equivalent. Results are sorted by title so the
+numbering is stable. Use `open QUERY --dry-run` to print the selected URL
+without launching a browser.
 
 ## Version the private vault
 

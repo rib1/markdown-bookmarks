@@ -4,11 +4,22 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
+import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
 const run = promisify(execFile);
 const cli = path.resolve('src', 'cli.js');
+
+async function readEventually(file) {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try { return await fs.readFile(file, 'utf8'); } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      await delay(20);
+    }
+  }
+  throw new Error(`Timed out waiting for ${file}`);
+}
 
 test('CLI help lists commands, launch options, browser choices, and linked workflows', async () => {
   const generalHelp = await run(process.execPath, [cli, 'help']);
@@ -22,10 +33,15 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
 
   const openHelp = await run(process.execPath, [cli, 'open', '--help']);
   assert.match(openHelp.stdout, /--pick NUMBER/);
+  assert.match(openHelp.stdout, /Without --pick, an interactive terminal displays a numbered menu/);
+  assert.match(openHelp.stdout, /With --pick NUMBER, that menu is skipped/);
+  assert.match(openHelp.stdout, /--pick=NUMBER is also accepted/);
   assert.match(openHelp.stdout, /--with BROWSER/);
   assert.match(openHelp.stdout, /--dry-run/);
   assert.match(openHelp.stdout, /chrome, edge, firefox, brave/);
   assert.match(openHelp.stdout, /safari\s+macOS only/);
+  assert.match(openHelp.stdout,
+    /Open a bookmark by its stable ID:\n\s+npm run bookmark -- open 550e8400-e29b-41d4-a716-446655440000/);
   assert.match(openHelp.stdout, /find database\n\s+npm run bookmark -- open database --pick 3/);
   assert.match(openHelp.stdout, /find database --browser --with firefox/);
   assert.match(openHelp.stdout, /Docker cannot launch a host application/);
@@ -47,6 +63,9 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   const saved = await run(process.execPath, [cli, 'save', '--url', 'https://example.test/cli', '--title', 'CLI Amiga', '--tags', 'amiga,test'], { env });
   const savedResult = JSON.parse(saved.stdout);
   assert.ok(savedResult.file);
+  const savedContent = await fs.readFile(savedResult.file, 'utf8');
+  const savedId = savedContent.match(/^id:\s*([^\r\n]+)$/m)?.[1];
+  assert.ok(savedId);
 
   const found = await run(process.execPath, [cli, 'find', 'amiga'], { env });
   assert.match(found.stdout, /URL: https:\/\/example.test\/cli/);
@@ -55,6 +74,8 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
 
   const opened = await run(process.execPath, [cli, 'open', 'amiga', '--dry-run'], { env });
   assert.equal(opened.stdout.trim(), 'https://example.test/cli');
+  const openedById = await run(process.execPath, [cli, 'open', savedId, '--dry-run'], { env });
+  assert.equal(openedById.stdout.trim(), 'https://example.test/cli');
 
   await run(process.execPath, [cli, 'save', '--url', 'https://example.test/cli-second',
     '--title', 'Second Amiga', '--tags', 'amiga,test'], { env });
@@ -70,6 +91,19 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   );
   const picked = await run(process.execPath, [cli, 'open', '--pick', '2', 'amiga', '--dry-run'], { env });
   assert.equal(picked.stdout.trim(), 'https://example.test/cli-second');
+  const inlinePicked = await run(process.execPath, [cli, 'open', 'amiga', '--pick=2', '--dry-run'], { env });
+  assert.equal(inlinePicked.stdout.trim(), 'https://example.test/cli-second');
+
+  const browserCapture = path.join(root, 'browser-url.txt');
+  const fakeBrowser = path.join(root, 'fake-browser');
+  await fs.writeFile(fakeBrowser, '#!/bin/sh\nprintf \'%s\' "$1" > "$BOOKMARK_BROWSER_CAPTURE"\n', { mode: 0o755 });
+  const directlyPicked = await run(process.execPath,
+    [cli, 'open', 'amiga', '--pick', '2', '--with', fakeBrowser], {
+      env: { ...env, BOOKMARK_BROWSER_CAPTURE: browserCapture }
+    });
+  assert.doesNotMatch(directlyPicked.stdout, /Multiple bookmarks found|Choose a bookmark/);
+  assert.equal(await readEventually(browserCapture), 'https://example.test/cli-second');
+
   const selectedBrowser = await run(process.execPath,
     [cli, 'open', '--with', 'firefox', '--pick', '1', 'amiga', '--dry-run'], { env });
   assert.equal(selectedBrowser.stdout.trim(), 'https://example.test/cli');
@@ -94,6 +128,24 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
     });
   assert.match(dockerSearch.stdout.trim(),
     /^file:\/\/\/C:\/Users\/me\/My%20Vault\/views\/\.search-results\/search-results-[\da-f-]+\.html$/);
+
+  const nativePageCapture = path.join(root, 'browser-page-url.txt');
+  const nativeBrowserSearch = await run(process.execPath,
+    [cli, 'find', 'amiga', '--browser', '--with', fakeBrowser], {
+      env: { ...env, BOOKMARK_BROWSER_CAPTURE: nativePageCapture }
+    });
+  const printedPageUrl = nativeBrowserSearch.stdout.match(
+    /Search results file:\n(file:\/\/\/[^\r\n]+)/)?.[1];
+  assert.ok(printedPageUrl, 'expected a standalone search-results file link');
+  assert.equal(await readEventually(nativePageCapture), printedPageUrl);
+  assert.match(nativeBrowserSearch.stdout, /Opened 2 bookmark results in the browser/);
+
+  const dockerBrowserSearch = await run(process.execPath,
+    [cli, 'find', 'amiga', '--browser'], {
+      env: { ...env, BOOKMARK_RESULTS_HOST_VAULT: 'C:\\Users\\me\\My Vault' }
+    });
+  assert.match(dockerBrowserSearch.stdout,
+    /Search results file:\nfile:\/\/\/C:\/Users\/me\/My%20Vault\/views\/\.search-results\/search-results-[\da-f-]+\.html/);
 
   const installed = await run(process.execPath, [cli, 'skill', 'install', '--path', root], { env });
   assert.match(installed.stdout, new RegExp(`${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*SKILL\\.md`));
