@@ -1,7 +1,8 @@
 import http from 'node:http';
-import { saveBookmark } from './vault.js';
+import { saveBookmark, vaultRoot } from './vault.js';
 
 const port = Number(process.env.PORT || 8787);
+const vault = vaultRoot();
 
 function send(response, status, body) {
   response.writeHead(status, {
@@ -20,7 +21,7 @@ const server = http.createServer(async (request, response) => {
   request.on('data', (chunk) => { raw += chunk; });
   request.on('end', async () => {
     try {
-      const result = await saveBookmark(JSON.parse(raw), process.env.VAULT_PATH || '/vault');
+      const result = await saveBookmark(JSON.parse(raw), vault);
       send(response, 201, { ok: true, result });
     } catch (error) {
       send(response, 400, { ok: false, error: error.message });
