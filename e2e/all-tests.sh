@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-node --test test/vault.test.js test/cli.test.js
+node --test test/vault.test.js test/cli.test.js test/server.test.js
 VAULT_PATH=/vault PORT=8787 node src/server.js &
 server_pid=$!
 trap 'kill "$server_pid" 2>/dev/null || true' EXIT
