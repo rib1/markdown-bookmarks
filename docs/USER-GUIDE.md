@@ -205,6 +205,9 @@ GitHub bookmarks receive repository and owner metadata when available. YouTube
 bookmarks are classified as videos and always receive the `youtube` tag.
 Mural bookmarks are classified as whiteboards and default to the `work`
 context.
+Bandcamp bookmarks receive the `bandcamp` tag and are classified as albums or
+tracks when the URL identifies that page type. The artist subdomain is used as
+the author only when the page did not provide an author.
 
 ## Command help
 

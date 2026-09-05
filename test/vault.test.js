@@ -401,6 +401,40 @@ test('applies GitHub and YouTube site plugins', async () => {
   assert.match(youtubeContent, /- "youtube"/);
 });
 
+test('applies Bandcamp metadata and preserves a captured artist', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-bandcamp-'));
+  const album = await saveBookmark({
+    url: 'https://desert-sounds.bandcamp.com/album/night-drive', title: 'Night Drive', tags: ['music']
+  }, root);
+  const track = await saveBookmark({
+    url: 'https://artist-name.bandcamp.com/track/last-train', title: 'Last Train', author: 'Artist Name'
+  }, root);
+  const albumContent = await fs.readFile(album.file, 'utf8');
+  const trackContent = await fs.readFile(track.file, 'utf8');
+  assert.match(albumContent, /site: bandcamp/);
+  assert.match(albumContent, /type: album/);
+  assert.match(albumContent, /author: "desert-sounds"/);
+  assert.match(albumContent, /- "music"/);
+  assert.match(albumContent, /- "bandcamp"/);
+  assert.match(trackContent, /type: track/);
+  assert.match(trackContent, /author: "Artist Name"/);
+});
+
+test('backfills Bandcamp metadata on duplicate save', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-bandcamp-legacy-'));
+  const saved = await saveBookmark({
+    url: 'https://example-artist.bandcamp.com/album/archive', title: 'Archive'
+  }, root);
+  let content = await fs.readFile(saved.file, 'utf8');
+  content = content.replace(/^type:.*\n|^site:.*\n|^author:.*\n/gm, '');
+  await fs.writeFile(saved.file, content, 'utf8');
+  await saveBookmark({ url: 'https://example-artist.bandcamp.com/album/archive', title: 'Archive' }, root);
+  content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /site: "bandcamp"/);
+  assert.match(content, /type: "album"/);
+  assert.match(content, /author: "example-artist"/);
+});
+
 test('backfills site metadata when a legacy bookmark is saved again', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-legacy-site-'));
   const saved = await saveBookmark({ url: 'https://github.com/rib1/uade-docker', title: 'UADE' }, root);

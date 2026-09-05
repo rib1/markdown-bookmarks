@@ -3,8 +3,9 @@ import youtube from './youtube.js';
 import mural from './mural.js';
 import confluence from './confluence.js';
 import jira from './jira.js';
+import bandcamp from './bandcamp.js';
 
-const plugins = [github, youtube, mural, confluence, jira];
+const plugins = [github, youtube, mural, confluence, jira, bandcamp];
 
 export function applySitePlugins(bookmark) {
   const url = new URL(bookmark.url);

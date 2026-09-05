@@ -152,6 +152,8 @@ Site plugins are URL-driven, deterministic, and independently testable.
   default `work` context when no context is supplied.
 - Jira: add site, issue type, issue/project identifiers, `jira` tag, and default
   `work` context when no context is supplied.
+- Bandcamp: add site, album/track type, artist handle from a non-reserved
+  Bandcamp subdomain when author is absent, and the `bandcamp` tag.
 
 Keep each plugin in its own `src/site-plugins/<name>.js` module and register it
 in `src/site-plugins/index.js`. Test new records, duplicate saves, and legacy
@@ -166,7 +168,7 @@ metadata enrichment.
 - Do not capture hostname, username, IP address, geolocation, or a full user-agent string.
 - Do not infer a sender from an author, repository owner, generic referral token, or campaign parameter.
 - Show a clear error when the localhost companion is unavailable.
-- Show actionable compatibility errors and never report `Saved` for unconfirmed fields.
+- Report `Saved` only when a bookmark was persisted, then show actionable warnings for omitted or unconfirmed fields.
 - Keep test-only capture overrides isolated from normal toolbar behavior.
 
 ## CLI contract
@@ -251,7 +253,7 @@ pull request. The `Credential scan` workflow runs Gitleaks on the same events.
 
 Tests must cover vault initialization, skill installation, CLI commands and
 path resolution, save/find/open behavior, temporary search-page safety and
-cleanup, duplicate merging, time filters, GitHub/YouTube/Mural plugins, legacy
+cleanup, duplicate merging, time filters, GitHub/YouTube/Mural/Bandcamp plugins, legacy
 enrichment, Chrome capture, and Markdown content. E2E tests must use ignored
 isolated test data, never the private vault.
 
