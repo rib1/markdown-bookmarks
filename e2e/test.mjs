@@ -30,6 +30,7 @@ try {
   // The test URL avoids relying on browser chrome UI to open the action popup.
   await popup.goto(`chrome-extension://${extensionId}/popup.html?test-url=${encodeURIComponent(testUrl)}&test-title=${encodeURIComponent('E2E Bookmark Page')}`);
   // Exercise the same tag-entry and save path used by the user.
+  await popup.locator('#context').selectOption('travel');
   await popup.locator('#tags').fill('e2e,work');
   await popup.getByRole('button', { name: 'Save current tab' }).click();
   console.log('waiting for save response');
@@ -55,9 +56,10 @@ try {
   assert.match(content, /- "e2e"/);
   assert.match(content, /- "work"/);
   assert.match(content, /- "duplicate"/);
+  assert.match(content, /contexts:\n {2}- "travel"/);
   assert.match(content, /save_count: 2/);
-  const saveHistory = content.match(/^save_history:\n((?:  - .*\n)+)/m)?.[1];
-  assert.equal((saveHistory?.match(/^  - /gm) || []).length, 2);
+  const saveHistory = content.match(/^save_history:\n((?: {2}- .*\n)+)/m)?.[1];
+  assert.equal((saveHistory?.match(/^ {2}- /gm) || []).length, 2);
   // Verify that the CLI can resolve the saved bookmark for browser opening.
   const opened = await exec('node', ['src/cli.js', 'open', testUrl, '--dry-run'], { cwd: '/e2e', env: { ...process.env, BOOKMARK_VAULT: vault } });
   assert.equal(opened.stdout.trim(), testUrl);

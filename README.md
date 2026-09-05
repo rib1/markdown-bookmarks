@@ -4,9 +4,17 @@ Save browser tabs as searchable Markdown files in a private, Git-versioned vault
 
 ## Quick start
 
+Windows PowerShell:
+
 ```powershell
 $env:BOOKMARK_VAULT = 'C:\path\to\private-vault'
 docker compose up --build
+```
+
+macOS:
+
+```sh
+BOOKMARK_VAULT="$HOME/path/to/private-vault" docker compose up --build
 ```
 
 Load `extension/` as an unpacked Chrome extension, then save tabs from its popup.
@@ -14,6 +22,7 @@ Load `extension/` as an unpacked Chrome extension, then save tabs from its popup
 Run all tests:
 
 ```powershell
+docker compose run --rm quality
 docker compose run --rm all-tests
 ```
 

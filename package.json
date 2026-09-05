@@ -5,6 +5,13 @@
   "type": "module",
   "scripts": {
     "bookmark": "node src/cli.js",
+    "lint": "eslint .",
+    "quality": "npm run lint && npm test",
     "test": "node --test test/vault.test.js test/cli.test.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0"
   }
 }

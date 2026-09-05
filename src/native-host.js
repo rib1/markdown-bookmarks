@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import { saveBookmark } from './vault.js';
 
 const input = process.stdin;

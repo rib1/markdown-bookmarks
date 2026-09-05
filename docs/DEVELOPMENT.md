@@ -63,7 +63,7 @@ Keep these concepts distinct:
 
 - `type`: primary item type, such as article, video, or whiteboard
 - `site`: recognized site-plugin name
-- `contexts`: life context, such as work, hobby, or personal
+- `contexts`: life context, such as work, hobby, personal, or travel
 - `areas`: ongoing responsibility
 - `projects`: many-to-many project references
 - `events`: many-to-many life-event references
@@ -147,11 +147,13 @@ Host development requires only Docker and Git. Run the complete suite from the
 application repository with:
 
 ```powershell
+docker compose run --rm quality
 docker compose run --rm all-tests
 ```
 
 GitHub Dependabot checks npm, Docker, and GitHub Actions dependencies weekly.
-The `Credential scan` workflow runs Gitleaks on every push and pull request.
+The `Quality` workflow runs ESLint and the complete test suite on every push and
+pull request. The `Credential scan` workflow runs Gitleaks on the same events.
 
 Tests must cover vault initialization, skill installation, CLI commands and
 path resolution, save/find/open behavior, duplicate merging, time filters,
