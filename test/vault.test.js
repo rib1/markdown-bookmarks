@@ -145,6 +145,9 @@ test('installs and refreshes vault AGENTS.md when migrations are checked', async
   assert.equal(await fs.readFile(target, 'utf8'), template);
   assert.match(template, /Do not assume the application repository/);
   assert.match(template, /How to search/);
+  assert.match(template, /share_history/);
+  assert.match(template, /capture_history/);
+  assert.match(template, /Missing sender data is normal/);
 
   await fs.writeFile(target, 'stale vault instructions\n', 'utf8');
   const second = await migrateVault(root);
@@ -242,6 +245,92 @@ test('records each save timestamp in save history', async () => {
   const secondHistory = second.match(/^save_history:\n((?: {2}- .*\n)+)/m)?.[1];
   assert.equal((secondHistory?.match(/^ {2}- /gm) || []).length, 2);
   assert.notEqual(firstHistory, secondHistory);
+});
+
+test('stores optional sender history without changing the schema or empty bookmarks', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-shares-'));
+  const ordinary = await saveBookmark({
+    url: 'https://example.test/ordinary', title: 'Ordinary bookmark'
+  }, root);
+  assert.doesNotMatch(await fs.readFile(ordinary.file, 'utf8'), /^share_history:/m);
+
+  const first = await saveBookmark({
+    url: 'https://example.test/shared', title: 'Shared bookmark',
+    shared_by: 'Alice', shared_via: 'Signal', share_event_id: 'share-one',
+    saved_at: '2026-09-05T10:00:00.000Z'
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/shared', title: 'Shared bookmark',
+    shared_by: 'Bob', shared_via: 'email', share_event_id: 'share-two',
+    saved_at: '2026-09-05T11:00:00.000Z'
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/shared', title: 'Shared bookmark',
+    shared_by: 'Bob', shared_via: 'email', share_event_id: 'share-two',
+    saved_at: '2026-09-05T12:00:00.000Z'
+  }, root);
+  const content = await fs.readFile(first.file, 'utf8');
+  const shares = metadataList(content, 'share_history');
+  assert.equal(BOOKMARK_SCHEMA_VERSION, 1);
+  assert.equal(shares.length, 2);
+  assert.deepEqual(shares[0], {
+    id: 'share-one', sender: 'Alice', channel: 'Signal',
+    received_at: '2026-09-05T10:00:00.000Z', source: 'manual', confidence: 'confirmed'
+  });
+  assert.equal(shares[1].sender, 'Bob');
+  assert.equal(shares[1].channel, 'email');
+  assert.equal((await findBookmarks('Alice', root)).length, 1);
+  const fuzzy = await findBookmarks('Alcie', root, { fuzzy: true });
+  assert.equal(fuzzy.length, 1);
+  assert.deepEqual(fuzzy[0].matchedFields, ['shared_by']);
+});
+
+test('validates sender values and conflicting share event retries', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-share-validation-'));
+  await assert.rejects(() => saveBookmark({
+    url: 'https://example.test/control', shared_by: 'Alice\nAdmin'
+  }, root), /control characters/);
+  await saveBookmark({
+    url: 'https://example.test/conflict', shared_by: 'Alice', share_event_id: 'same-event'
+  }, root);
+  await assert.rejects(() => saveBookmark({
+    url: 'https://example.test/conflict', shared_by: 'Bob', share_event_id: 'same-event'
+  }, root), /already exists with different sender information/);
+});
+
+test('records searchable browser and device capture history on every save', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-captures-'));
+  const saved = await saveBookmark({
+    url: 'https://example.test/devices', title: 'Device history',
+    capture_client: { version: '0.2.0' },
+    capture: {
+      id: 'capture-mac', os: 'mac', architecture: 'arm64',
+      browser: 'Google Chrome', browser_version: '140', device: 'home-mac'
+    },
+    saved_at: '2026-09-05T10:00:00.000Z'
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/devices', title: 'Device history',
+    capture_client: { version: '0.2.0' },
+    capture: {
+      id: 'capture-win', os: 'win', architecture: 'x86-64',
+      browser: 'Microsoft Edge', browser_version: '140', device: 'work-windows'
+    },
+    saved_at: '2026-09-05T11:00:00.000Z'
+  }, root);
+  const content = await fs.readFile(saved.file, 'utf8');
+  const captures = metadataList(content, 'capture_history');
+  assert.equal(captures.length, 2);
+  assert.deepEqual(captures[0], {
+    id: 'capture-mac', saved_at: '2026-09-05T10:00:00.000Z',
+    client: 'browser-extension', extension_version: '0.2.0', device: 'home-mac',
+    os: 'mac', architecture: 'arm64', browser: 'Google Chrome', browser_version: '140'
+  });
+  assert.equal(captures[1].device, 'work-windows');
+  assert.equal((await findBookmarks('home-mac', root)).length, 1);
+  const fuzzy = await findBookmarks('work-widnows', root, { fuzzy: true });
+  assert.equal(fuzzy.length, 1);
+  assert.deepEqual(fuzzy[0].matchedFields, ['capture_source']);
 });
 
 test('filters bookmark search by saved time', async () => {

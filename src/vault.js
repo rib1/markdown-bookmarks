@@ -18,6 +18,8 @@ import {
 import { applySitePlugins } from './site-plugins/index.js';
 import { fuzzyBookmarkMatch } from './fuzzy-search.js';
 import { sortSearchResults } from './search-result-order.js';
+import { appendShareEvent, createShareEvent } from './share-history.js';
+import { appendCaptureEvent, createCaptureEvent } from './capture-history.js';
 import { vaultRoot } from './vault-path.js';
 
 export { vaultRoot } from './vault-path.js';
@@ -89,6 +91,8 @@ async function findBookmarkByUrl(url, root) {
 export async function saveBookmark(input, root = vaultRoot()) {
   input = applySitePlugins(input);
   const now = input.saved_at || new Date().toISOString();
+  const shareEvent = createShareEvent(input, now);
+  const captureEvent = createCaptureEvent(input, now);
   const id = input.id || crypto.randomUUID();
   const title = input.title || input.url;
   const tags = [...new Set((input.tags || []).map(String).map((v) => v.trim()).filter(Boolean))];
@@ -102,6 +106,14 @@ export async function saveBookmark(input, root = vaultRoot()) {
     if (input.contexts?.length) {
       const oldContexts = readList(content, 'contexts');
       content = replaceList(content, 'contexts', [...new Set([...oldContexts, ...input.contexts])]);
+    }
+    if (shareEvent) {
+      const mergedShares = appendShareEvent(readList(content, 'share_history'), shareEvent);
+      if (mergedShares.added) content = replaceList(content, 'share_history', mergedShares.history);
+    }
+    if (captureEvent) {
+      const mergedCaptures = appendCaptureEvent(readList(content, 'capture_history'), captureEvent);
+      if (mergedCaptures.added) content = replaceList(content, 'capture_history', mergedCaptures.history);
     }
     for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'space_key', 'page_id', 'issue_key', 'project_key', 'published_at', 'published_at_source', 'published_at_confidence']) {
       if (input[field]) content = replaceScalar(content, field, input[field]);
@@ -118,7 +130,10 @@ export async function saveBookmark(input, root = vaultRoot()) {
     content = replaceList(content, 'save_history', saveHistory);
     content = replaceScalar(content, 'schema_version', BOOKMARK_SCHEMA_VERSION);
     await fs.writeFile(existing.file, content, 'utf8');
-    return { id: readScalar(content, 'id'), file: existing.file, title, tags: mergedTags, duplicate: true };
+    return {
+      id: readScalar(content, 'id'), file: existing.file, title, tags: mergedTags,
+      duplicate: true, share_recorded: Boolean(shareEvent), capture_recorded: Boolean(captureEvent)
+    };
   }
   const dir = path.join(root, 'bookmarks', now.slice(0, 7).replace('-', path.sep));
   await fs.mkdir(dir, { recursive: true });
@@ -138,13 +153,18 @@ export async function saveBookmark(input, root = vaultRoot()) {
     input.published_at ? `published_at: ${input.published_at}` : '',
     input.published_at_source ? `published_at_source: ${input.published_at_source}` : '',
     input.published_at_confidence ? `published_at_confidence: ${input.published_at_confidence}` : '',
+    shareEvent ? `share_history:\n${yamlList([shareEvent])}` : '',
+    captureEvent ? `capture_history:\n${yamlList([captureEvent])}` : '',
     `saved_at: ${now}`, `first_saved_at: ${input.first_saved_at || now}`,
     `last_saved_at: ${input.last_saved_at || now}`, `save_count: ${input.save_count || 1}`,
     `save_history:`, yamlList([now]), `---`
   ].filter(Boolean).join('\n');
   const body = `${metadata}\n\n## Summary\n\n${input.summary || ''}\n`;
   await fs.writeFile(file, body, 'utf8');
-  return { id, file, title, tags };
+  return {
+    id, file, title, tags,
+    share_recorded: Boolean(shareEvent), capture_recorded: Boolean(captureEvent)
+  };
 }
 
 function savedAfter(content, cutoff) {

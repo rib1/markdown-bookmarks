@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { readList } from './bookmark-format.js';
 import { metadataValue, sortSearchResults } from './search-result-order.js';
+import { shareHistoryLabels } from './share-history.js';
+import { captureHistoryLabels } from './capture-history.js';
 import { vaultRoot } from './vault-path.js';
 
 export const SEARCH_RESULTS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -38,6 +40,8 @@ function resultCard(result) {
   const savedAt = metadataValue(result.content, 'last_saved_at') || metadataValue(result.content, 'saved_at');
   const tags = readList(result.content, 'tags');
   const contexts = readList(result.content, 'contexts');
+  const sharedBy = [...new Set(shareHistoryLabels(readList(result.content, 'share_history')))];
+  const savedFrom = [...new Set(captureHistoryLabels(readList(result.content, 'capture_history')))];
   const openLink = parsedUrl
     ? `<a class="open-link" href="${escapeHtml(parsedUrl.href)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHtml(title)}">Open</a>`
     : '<span class="open-link disabled" aria-disabled="true">Unavailable</span>';
@@ -51,6 +55,8 @@ function resultCard(result) {
     <div class="url">${escapeHtml(rawUrl || '(missing URL)')}</div>
     ${chips('Tags', tags)}
     ${chips('Contexts', contexts)}
+    ${chips('Shared by', sharedBy)}
+    ${chips('Saved from', savedFrom)}
     ${matchDetails}
     ${savedAt ? `<div class="metadata"><strong>Saved:</strong> ${escapeHtml(savedAt)}</div>` : ''}
   </article>`;

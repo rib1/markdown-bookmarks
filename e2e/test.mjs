@@ -35,11 +35,20 @@ try {
   // Exercise the same tag-entry and save path used by the user.
   await popup.locator('#context').selectOption('travel');
   await popup.locator('#tags').fill('e2e,work');
+  await popup.locator('#shared-by').fill('Alice');
+  await popup.locator('#shared-via').fill('Signal');
+  await popup.locator('summary').click();
+  await popup.locator('#device').fill('e2e-mac');
   await popup.getByRole('button', { name: 'Save current tab' }).click();
   console.log('waiting for save response');
   await expect(popup.locator('#result')).toHaveText('Saved.', { timeout: 10_000 });
+  const remembered = await popup.evaluate(() => globalThis.chrome.storage.local.get(['recentSenders', 'deviceLabel']));
+  assert.deepEqual(remembered.recentSenders, ['Alice']);
+  assert.equal(remembered.deviceLabel, 'e2e-mac');
   // Save the same URL again to verify deduplication and tag merging.
   await popup.locator('#tags').fill('e2e,work,duplicate');
+  await popup.locator('#shared-by').fill('Bob');
+  await popup.locator('#shared-via').fill('email');
   await popup.getByRole('button', { name: 'Save current tab' }).click();
   await expect(popup.locator('#result')).toHaveText('Saved.', { timeout: 10_000 });
 
@@ -61,6 +70,15 @@ try {
   assert.match(content, /- "duplicate"/);
   assert.match(content, /contexts:\n {2}- "travel"/);
   assert.match(content, /save_count: 2/);
+  assert.match(content, /"sender":"Alice"/);
+  assert.match(content, /"sender":"Bob"/);
+  assert.match(content, /"channel":"Signal"/);
+  assert.match(content, /"device":"e2e-mac"/);
+  assert.match(content, /"client":"browser-extension"/);
+  assert.match(content, /"extension_version":"0.2.0"/);
+  assert.match(content, /"os":"linux"/);
+  assert.match(content, /"architecture":"x86-64"/);
+  assert.match(content, /"browser":"Chromium"/);
   const saveHistory = content.match(/^save_history:\n((?: {2}- .*\n)+)/m)?.[1];
   assert.equal((saveHistory?.match(/^ {2}- /gm) || []).length, 2);
   // Verify that the CLI can resolve the saved bookmark for browser opening.

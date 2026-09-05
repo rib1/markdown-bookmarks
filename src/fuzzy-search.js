@@ -1,4 +1,6 @@
 import { readList, readScalar } from './bookmark-format.js';
+import { shareHistorySearchText } from './share-history.js';
+import { captureHistorySearchText } from './capture-history.js';
 
 const scalarFields = [
   ['title', 1],
@@ -87,6 +89,8 @@ function searchableFields(content) {
   return [
     ...scalarFields.map(([name, weight]) => ({ name, weight, value: readScalar(content, name) })),
     ...listFields.map(([name, weight]) => ({ name, weight, value: readList(content, name).join(' ') })),
+    { name: 'shared_by', weight: 0.9, value: shareHistorySearchText(readList(content, 'share_history')) },
+    { name: 'capture_source', weight: 0.85, value: captureHistorySearchText(readList(content, 'capture_history')) },
     { name: 'metadata', weight: 0.7, value: frontmatterValues(content) },
     { name: 'body', weight: 0.65, value: markdownBody(content) }
   ].filter((field) => field.value !== undefined && String(field.value).trim());

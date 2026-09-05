@@ -1,6 +1,15 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>Save bookmark</title>
+<style>
+  body { font: 14px system-ui, sans-serif; min-width: 280px; margin: 1rem; }
+  form, label { display: grid; gap: .45rem; }
+  form { gap: .75rem; }
+  input, select, button { font: inherit; }
+  output { display: block; margin-top: .75rem; white-space: pre-wrap; }
+  #compatibility:not(:empty) { margin-bottom: .75rem; color: #9a5500; }
+</style>
+<output id="compatibility" role="status">Checking companion compatibility…</output>
 <form id="form">
   <label>Context
     <select id="context">
@@ -15,7 +24,21 @@
     </select>
   </label>
   <input id="tags" placeholder="tags, comma-separated" autofocus>
+  <label>Shared by (optional)
+    <input id="shared-by" list="recent-senders" placeholder="Name">
+    <datalist id="recent-senders"></datalist>
+  </label>
+  <label>Via (optional)
+    <input id="shared-via" placeholder="Signal, Slack, email…">
+  </label>
+  <details>
+    <summary>Save source</summary>
+    <label>Device label (optional)
+      <input id="device" placeholder="home-mac or work-windows">
+    </label>
+    <small>Remembered locally. OS and browser details are recorded automatically.</small>
+  </details>
   <button>Save current tab</button>
 </form>
 <output id="result"></output>
-<script src="popup.js"></script>
+<script type="module" src="popup.js"></script>

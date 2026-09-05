@@ -65,6 +65,11 @@ frontmatter includes:
   publication date was extracted
 - `saved_at`, `first_saved_at`, `last_saved_at`, `save_count`, and
   `save_history` for save activity
+- optional `share_history` receipt events containing sender, channel, receipt
+  time, source, and confidence
+- optional `capture_history` events identifying where browser saves happened,
+  including a user-chosen device label, OS, architecture, browser/version, and
+  browser add-on version
 - optional typed relationships such as `references`, `supports`, `alternative`,
   `follow-up`, and `duplicate`
 
@@ -73,6 +78,10 @@ many-to-many relationships. Inspect existing project and event records before
 assuming a detailed schema for them.
 
 Preserve unknown metadata. Keep access history separate from saved-page content.
+Keep the page `author`, link sender, and save device distinct. A bookmark can
+have multiple share and capture events. Missing sender data is normal: do not
+invent a sender or add an `unknown` placeholder. Do not infer a sender from an
+author, URL owner, or generic referral/campaign parameter.
 Use stable IDs for relationships and support many-to-many links. Keep these
 concepts distinct:
 
@@ -90,7 +99,7 @@ Do not create semantic category directories.
 2. Search filenames only as a quick candidate filter; confirm matches by reading
    frontmatter and Markdown bodies.
 3. Search case-insensitively across relevant `*.md` files for title, URL,
-   summary text, and metadata values.
+   summary text, sender/channel, save device/browser, and metadata values.
 4. For a metadata match, verify that the value belongs to the intended YAML
    field or list. A text hit alone does not prove a tag, context, or relation.
 5. For recent items, parse `saved_at` or `last_saved_at`; do not rely only on the
@@ -121,7 +130,7 @@ direct recursive file inspection is equally valid.
    existing records.
 2. Search for an existing record before creating one.
 3. Make the smallest requested change and preserve stable IDs, URLs, timestamps,
-   notes, unknown fields, valid YAML, and Markdown.
+   notes, share/capture event IDs, unknown fields, valid YAML, and Markdown.
 4. Use metadata for classification and stable IDs for relationships.
 5. Do not invent publication dates, contexts, projects, events, or relationships.
    Mark suggestions as suggestions unless the user confirms them.

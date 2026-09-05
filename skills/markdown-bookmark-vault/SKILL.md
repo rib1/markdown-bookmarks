@@ -22,6 +22,9 @@ relate, review, or update their Markdown bookmark vault.
 - Use existing project/event IDs when linking bookmarks. Do not create duplicate
   entities because names differ slightly.
 - Preserve the source and confidence of extracted publication dates.
+- Keep page authors distinct from people who shared links. Missing sender data
+  is normal and must not be guessed from URLs or authors.
+- Preserve structured `share_history` and `capture_history` events and their IDs.
 - Add typed relationships only when supported by the page or user instruction.
 
 ## Safe workflow
@@ -44,7 +47,8 @@ relate, review, or update their Markdown bookmark vault.
 
 ## Useful operations
 
-- Find bookmarks by title, URL, tag, project, context, event, or body text.
+- Find bookmarks by title, URL, tag, project, context, event, sender, save
+  device, browser, or body text.
 - Identify unclassified, stale, duplicate, or missing-metadata bookmarks.
 - Suggest tags, contexts, projects, events, and relationships, distinguishing
   suggestions from confirmed edits.

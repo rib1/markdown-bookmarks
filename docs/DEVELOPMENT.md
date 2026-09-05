@@ -59,7 +59,7 @@ includes `url`, `canonical_url`, `title`, `type`, `site`, `contexts`, `areas`,
 `projects`, `events`, `tags`, `status`, `priority`, `author`, `published_at`,
 `published_at_source`, `published_at_confidence`, `saved_at`,
 `first_saved_at`, `last_saved_at`, `save_count`, `save_history`,
-`schema_version`, `summary`, and `related`.
+`share_history`, `capture_history`, `schema_version`, `summary`, and `related`.
 
 Keep these concepts distinct:
 
@@ -72,6 +72,9 @@ Keep these concepts distinct:
 - `tags`: subject labels
 - activity fields: save/open history
 - `published_at*`: extracted publication data and provenance
+- `author`: creator of the saved page; never use it for the person who sent a link
+- `share_history`: optional receipt events with sender/channel provenance
+- `capture_history`: browser-save provenance such as device label, OS, browser, and extension version
 - `summary`: deterministic or user-written summary; capture must not require an LLM
 
 ## Save and duplicate rules
@@ -83,6 +86,7 @@ Keep these concepts distinct:
 - Update `last_saved_at`, increment `save_count`, and append the timestamp to
   `save_history`.
 - Backfill new plugin metadata into legacy records.
+- Append sender and browser-capture events on duplicate saves; deduplicate event IDs.
 - Do not delete duplicates automatically; provide a preview-based command later.
 
 ## Schema migration rules
@@ -107,6 +111,27 @@ Context values that also appear as tags are retained because they may be
 intentional. Vault initialization and migration also ignore macOS `.DS_Store`
 files and `views/.search-results/` without replacing existing `.gitignore`
 rules.
+
+New optional `share_history` and `capture_history` fields remain compatible
+with schema version 1. Existing bookmarks are valid without them, so adding
+these fields does not run a migration or rewrite the vault. Increment the
+schema only when existing stored data needs conversion or existing readers can
+no longer interpret the format.
+
+## Browser API compatibility
+
+Browser add-on and companion compatibility uses an API protocol independent of
+the vault schema. `GET /capabilities` advertises protocol bounds, supported
+features, accepted bookmark input fields, and deprecated aliases. Every browser
+save uses a versioned envelope and the response confirms each processed input
+field.
+
+- Reject legacy add-ons before writing when their payload could lose fields.
+- Tell the user to reload or update the browser add-on when its protocol is too old.
+- Tell the user to update the companion when the add-on is newer.
+- Reject unknown fields instead of silently discarding them.
+- Keep renamed fields as explicit aliases for a transition period and return a warning.
+- Never partially write an incompatible or invalid request.
 
 Every migration/startup pass also synchronizes `templates/vault/AGENTS.md` to
 the vault root, including when the schema is already current. This keeps agents
@@ -135,9 +160,13 @@ metadata enrichment.
 ## Browser extension rules
 
 - Capture active-tab URL and title.
-- Allow user-entered tags and a context dropdown.
+- Allow user-entered tags, context, optional sender/channel, and an optional remembered device label.
 - Extract author, description, publication date, and deterministic summary when available.
+- Record OS, architecture, browser/version, and extension version for browser saves.
+- Do not capture hostname, username, IP address, geolocation, or a full user-agent string.
+- Do not infer a sender from an author, repository owner, generic referral token, or campaign parameter.
 - Show a clear error when the localhost companion is unavailable.
+- Show actionable compatibility errors and never report `Saved` for unconfirmed fields.
 - Keep test-only capture overrides isolated from normal toolbar behavior.
 
 ## CLI contract
@@ -147,7 +176,7 @@ The CLI must support:
 ```text
 init [--path PATH] [--no-skill]
 skill install [--path PATH]
-save --url URL [--title TITLE] [--tags tag1,tag2]
+save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
 find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--browser] [--with BROWSER] [--dry-run]
 open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]
 ```

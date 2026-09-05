@@ -61,3 +61,23 @@ test('weights title matches above body matches and sorts scores deterministicall
   ]);
   assert.equal(sorted[0].file, 'beta.md');
 });
+
+test('matches sender names inside structured share history', () => {
+  const content = bookmark({
+    title: 'Database notes',
+    extra: 'share_history:\n  - {"id":"one","sender":"Charlotte","channel":"Signal"}\n'
+  });
+  const match = fuzzyBookmarkMatch('Charlote', content);
+  assert.ok(match);
+  assert.deepEqual(match.fields, ['shared_by']);
+});
+
+test('matches device labels inside structured capture history', () => {
+  const content = bookmark({
+    title: 'Database notes',
+    extra: 'capture_history:\n  - {"id":"one","device":"work-windows","os":"win"}\n'
+  });
+  const match = fuzzyBookmarkMatch('work-widnows', content);
+  assert.ok(match);
+  assert.deepEqual(match.fields, ['capture_source']);
+});
