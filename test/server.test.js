@@ -47,6 +47,7 @@ test('HTTP server prefers BOOKMARK_VAULT over VAULT_PATH', async (t) => {
   server.stdout.setEncoding('utf8');
   const [message] = await once(server.stdout, 'data', { signal: AbortSignal.timeout(5000) });
   assert.match(message, /bookmark companion listening/);
+  assert.match(message, new RegExp(`vault: ${bookmarkVault.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
 
   const response = await fetch(`http://127.0.0.1:${port}/bookmarks`, {
     method: 'POST',

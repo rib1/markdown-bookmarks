@@ -29,4 +29,4 @@ const server = http.createServer(async (request, response) => {
   });
 });
 
-server.listen(port, '0.0.0.0', () => console.log(`bookmark companion listening on ${port}`));
+server.listen(port, '0.0.0.0', () => console.log(`bookmark companion listening on ${port}; vault: ${vault}`));
