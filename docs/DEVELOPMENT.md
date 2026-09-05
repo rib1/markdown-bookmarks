@@ -183,7 +183,7 @@ init [--path PATH] [--no-skill]
 skill install [--path PATH]
 save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
 find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
-open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]
+open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
 ```
 
 All npm examples must include the argument separator:
@@ -211,7 +211,9 @@ ranking must feed text output, generated browser pages, and `open --pick`.
 `open` validates HTTP/HTTPS URLs before launching the platform default browser.
 A unique match opens directly; multiple matches are sorted by title and shown
 as numbered choices. Interactive terminals prompt for a number, while
-non-interactive use requires `--pick NUMBER`. `--with BROWSER` selects a known
+non-interactive use requires `--pick NUMBER`. Time-filtered find/open workflows
+must repeat the same `--saved-within` or `--saved-since` filter so `--pick`
+uses the displayed result numbering. `--with BROWSER` selects a known
 browser alias or an explicit application/executable in native mode. Its
 `--dry-run` prints the resolved bookmark URL without launching a browser.
 `open --help` documents every launch option and gives linked search/open

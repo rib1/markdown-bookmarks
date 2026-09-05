@@ -294,6 +294,35 @@ The CLI can also record manually supplied sender information:
 npm run bookmark -- save --url https://example.test/page --title "Useful page" --shared-by Alice --via Signal
 ```
 
+Limit results by their original save time with `--saved-within`:
+
+```powershell
+npm run bookmark -- find database --saved-within week
+npm run bookmark -- find travel --saved-within month
+npm run bookmark -- find archive --saved-within year
+```
+
+The accepted periods are `day`, `week`, `month`, and `year`. To use a specific
+cutoff date instead, pass an ISO date:
+
+```powershell
+npm run bookmark -- find database --saved-since 2026-09-01
+```
+
+Repeat the filter when opening a numbered result so `--pick` uses the same
+filtered list:
+
+```powershell
+npm run bookmark -- find database --saved-since 2026-09-01
+npm run bookmark -- open database --saved-since 2026-09-01 --pick 3
+```
+
+The same workflow works with a chosen browser:
+
+```powershell
+npm run bookmark -- open database --saved-within month --pick 2 --with chrome
+```
+
 Exact substring matching is the default. For typo-tolerant ranked results, add
 `--fuzzy`:
 

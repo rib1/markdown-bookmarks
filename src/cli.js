@@ -98,6 +98,10 @@ below to this CLI.
 
 Options:
   --pick NUMBER     Skip the menu and directly open a numbered search result.
+  --saved-within PERIOD
+                    Only match bookmarks saved within day, week, month, or year.
+  --saved-since DATE
+                    Only match bookmarks saved on or after YYYY-MM-DD.
   --fuzzy           Use typo-tolerant ranked matching instead of exact-only matching.
   --with BROWSER   Use a browser alias, application name, executable, or executable path.
   --dry-run         Print the selected URL without launching a browser.
@@ -137,6 +141,10 @@ Search first, then open the third matching link:
   npm run bookmark -- find database
   npm run bookmark -- open database --pick 3
 
+Search by date, then open the third result from that same filtered list:
+  npm run bookmark -- find database --saved-since 2026-09-01
+  npm run bookmark -- open database --saved-since 2026-09-01 --pick 3
+
 Open that third link in Firefox:
   npm run bookmark -- open database --pick 3 --with firefox
 
@@ -155,12 +163,13 @@ function printHelp() {
   init [--path PATH] [--no-skill]
   skill install [--path PATH]
   save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
-  find QUERY [--saved-within PERIOD] [--saved-since DATE] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
-  open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]
+  find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
+  open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
 
 npm syntax:
   Keep the "--" in "npm run bookmark -- COMMAND". It forwards options such as
-  --browser, --fuzzy, --expand, --pick, --with, and --dry-run to the bookmark CLI.
+  --browser, --fuzzy, --expand, --pick, --saved-within, --saved-since, --with,
+  and --dry-run to the bookmark CLI.
 
 Compact find output:
   1. Night Drive [d34db33f]
@@ -176,6 +185,11 @@ Common workflows:
   npm run bookmark -- open database --pick 3
   npm run bookmark -- find database --expand
   npm run bookmark -- open d34db33f
+  npm run bookmark -- find database --saved-within week
+  npm run bookmark -- find travel --saved-within month
+  npm run bookmark -- find archive --saved-within year
+  npm run bookmark -- find database --saved-since 2026-09-01
+  npm run bookmark -- open database --saved-since 2026-09-01 --pick 3
   npm run bookmark -- open database --pick 3 --with firefox
   npm run bookmark -- find triper --fuzzy
   npm run bookmark -- find database --browser --with chrome
@@ -260,15 +274,19 @@ if (command === 'help' || command === '--help' || command === '-h') {
   if (args.includes('--help') || args.includes('-h')) {
     printOpenHelp();
   } else {
-    const query = positionalArgument(['--pick', '--with']);
+    const query = positionalArgument(['--pick', '--with', '--saved-within', '--saved-since']);
     const dryRun = args.includes('--dry-run');
     const fuzzy = args.includes('--fuzzy');
     const selectedBrowser = option('--with');
     if (args.includes('--with') && (!selectedBrowser || selectedBrowser.startsWith('-'))) {
       throw new Error('--with requires a browser name or executable');
     }
-    if (!query) throw new Error('Usage: npm run bookmark -- open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]');
-    const selection = await chooseOpenResult(await findBookmarks(query, undefined, { fuzzy }), option('--pick'));
+    if (!query) throw new Error('Usage: npm run bookmark -- open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]');
+    const selection = await chooseOpenResult(await findBookmarks(query, undefined, {
+      fuzzy,
+      savedWithin: option('--saved-within'),
+      savedSince: option('--saved-since')
+    }), option('--pick'));
     if (selection === CANCELLED_SELECTION) {
       console.log('Cancelled.');
     } else {

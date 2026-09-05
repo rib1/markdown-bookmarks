@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CANCELLED_SELECTION, interactiveResult } from '../src/open-selection.js';
+import { saveBookmark } from '../src/vault.js';
 
 const run = promisify(execFile);
 const cli = path.resolve('src', 'cli.js');
@@ -48,10 +49,12 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /Markdown Bookmarks commands:/);
   assert.match(generalHelp.stdout, /save --url URL .*--shared-by NAME.*--via CHANNEL/);
   assert.match(generalHelp.stdout, /find QUERY .*--expand.*--with BROWSER/);
+  assert.match(generalHelp.stdout, /--saved-within day\|week\|month\|year/);
+  assert.match(generalHelp.stdout, /--saved-since YYYY-MM-DD/);
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
   assert.match(generalHelp.stdout, /find QUERY .*--fuzzy.*--browser/);
   assert.match(generalHelp.stdout, /Keep the "--" in "npm run bookmark -- COMMAND"/);
-  assert.match(generalHelp.stdout, /--browser, --fuzzy, --expand, --pick, --with, and --dry-run/);
+  assert.match(generalHelp.stdout, /--browser, --fuzzy, --expand, --pick, --saved-within, --saved-since, --with,/);
   assert.match(generalHelp.stdout, /Compact find output:\n\s+1\. Night Drive \[d34db33f\]/);
   assert.match(generalHelp.stdout, /TAGS: bandcamp, music/);
   assert.match(generalHelp.stdout, /find QUERY --expand to include vault file paths and full Markdown records/);
@@ -61,11 +64,18 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /save --url https:\/\/example\.test\/page --shared-by Alice --via Signal/);
   assert.match(generalHelp.stdout, /find database\n\s+npm run bookmark -- open database --pick 3/);
   assert.match(generalHelp.stdout, /find database --expand/);
+  assert.match(generalHelp.stdout, /find database --saved-within week/);
+  assert.match(generalHelp.stdout, /find travel --saved-within month/);
+  assert.match(generalHelp.stdout, /find archive --saved-within year/);
+  assert.match(generalHelp.stdout, /find database --saved-since 2026-09-01/);
+  assert.match(generalHelp.stdout, /open database --saved-since 2026-09-01 --pick 3/);
   assert.match(generalHelp.stdout, /open database --pick 3 --with firefox/);
   assert.match(generalHelp.stdout, /find database --browser --with chrome/);
 
   const openHelp = await run(process.execPath, [cli, 'open', '--help']);
   assert.match(openHelp.stdout, /--pick NUMBER/);
+  assert.match(openHelp.stdout, /--saved-within PERIOD\n\s+Only match bookmarks saved within day, week, month, or year/);
+  assert.match(openHelp.stdout, /--saved-since DATE\n\s+Only match bookmarks saved on or after YYYY-MM-DD/);
   assert.match(openHelp.stdout, /--fuzzy\s+Use typo-tolerant ranked matching/);
   assert.match(openHelp.stdout, /keep the "--" after "bookmark"/i);
   assert.match(openHelp.stdout, /Without --pick, an interactive terminal displays a numbered menu/);
@@ -84,6 +94,8 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout,
     /Full stable IDs work too:\n\s+npm run bookmark -- open 550e8400-e29b-41d4-a716-446655440000/);
   assert.match(openHelp.stdout, /find database\n\s+npm run bookmark -- open database --pick 3/);
+  assert.match(openHelp.stdout,
+    /find database --saved-since 2026-09-01\n\s+npm run bookmark -- open database --saved-since 2026-09-01 --pick 3/);
   assert.match(openHelp.stdout, /find database --browser --with firefox/);
   assert.match(openHelp.stdout, /open triper --fuzzy/);
   assert.match(openHelp.stdout, /Docker cannot launch a host application/);
@@ -94,6 +106,43 @@ test('empty interactive link selection cancels without choosing a bookmark', () 
   assert.equal(interactiveResult(results, ''), CANCELLED_SELECTION);
   assert.equal(interactiveResult(results, '   '), CANCELLED_SELECTION);
   assert.equal(interactiveResult(results, '2'), results[1]);
+});
+
+test('time-filtered find numbering is reused by open --pick and --with', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-cli-time-'));
+  const env = { ...process.env, BOOKMARK_VAULT: root };
+  const recent = new Date().toISOString();
+  const cutoff = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  await saveBookmark({
+    url: 'https://example.test/timeline-old', title: 'Aardvark old', tags: ['timeline'],
+    saved_at: '2020-01-01T00:00:00.000Z'
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/timeline-alpha', title: 'Alpha recent', tags: ['timeline'], saved_at: recent
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/timeline-beta', title: 'Beta recent', tags: ['timeline'], saved_at: recent
+  }, root);
+
+  const found = await run(process.execPath,
+    [cli, 'find', 'timeline', '--saved-since', cutoff], { env });
+  assert.match(found.stdout, /^1\. Alpha recent /m);
+  assert.match(found.stdout, /^2\. Beta recent /m);
+  assert.doesNotMatch(found.stdout, /Aardvark old/);
+
+  const browserCapture = path.join(root, 'time-filtered-browser-url.txt');
+  const fakeBrowser = path.join(root, 'fake-time-filtered-browser');
+  await fs.writeFile(fakeBrowser, '#!/bin/sh\nprintf \'%s\' "$1" > "$BOOKMARK_BROWSER_CAPTURE"\n', { mode: 0o755 });
+  const opened = await run(process.execPath, [cli, 'open', 'timeline',
+    '--saved-since', cutoff, '--pick', '2', '--with', fakeBrowser], {
+    env: { ...env, BOOKMARK_BROWSER_CAPTURE: browserCapture }
+  });
+  assert.equal(opened.stdout, '');
+  assert.equal(await readEventually(browserCapture), 'https://example.test/timeline-beta');
+
+  const within = await run(process.execPath,
+    [cli, 'open', 'timeline', '--saved-within', 'week', '--pick', '1', '--dry-run'], { env });
+  assert.equal(within.stdout.trim(), 'https://example.test/timeline-alpha');
 });
 
 test('CLI commands initialize, save, find, install the vault skill, and dry-run open', async () => {
