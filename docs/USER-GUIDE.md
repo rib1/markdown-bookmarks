@@ -1,12 +1,15 @@
 # User guide
 
-This guide describes the current prototype. The companion currently runs in
-Docker; a future release will provide a standalone executable.
+This guide describes the current prototype. The companion can run in Docker or
+directly with Node.js and npm. A future release will provide a standalone
+executable that does not require Docker or a language runtime.
 
 ## Requirements
 
-Install Docker Desktop, Git, and Chrome or another Chromium-based browser. The
-host does not need Node.js, Python, npm, or a database server.
+Install Git and Chrome or another Chromium-based browser. For the Docker
+workflow, install Docker Desktop; the host does not need Node.js or npm. For the
+native prototype workflow, install Node.js 26, which includes npm; Docker is not
+required. Neither workflow needs Python or a database server.
 
 ## Get the application
 
@@ -96,6 +99,31 @@ start it in the background with `docker compose up --build -d`. Stop it with
 
 The same configured vault is used by the companion service and its CLI.
 
+## Run without Docker using npm
+
+The Node prototype has no runtime dependencies, so there is no package-install
+step. Install Node.js 26 and run these commands from the application repository.
+
+Windows PowerShell:
+
+```powershell
+$env:BOOKMARK_VAULT = 'C:\Users\YOUR-NAME\Documents\my-bookmarks'
+npm run bookmark -- init
+npm start
+```
+
+macOS:
+
+```bash
+export BOOKMARK_VAULT="$HOME/Documents/my-bookmarks"
+npm run bookmark -- init
+npm start
+```
+
+The API listens at `http://127.0.0.1:8787`. Keep that terminal open while using
+the extension and press `Ctrl+C` to stop the companion. This is a direct way to
+run the current prototype, not the future self-contained companion binary.
+
 ## Install the extension
 
 1. Open `chrome://extensions` in Chrome.
@@ -146,7 +174,7 @@ context.
 
 ## Search from the CLI
 
-The current CLI runs inside Docker:
+With the Docker companion running:
 
 ```powershell
 docker compose exec bookmarkd node src/cli.js find database
@@ -155,11 +183,20 @@ docker compose exec bookmarkd node src/cli.js find database
 The same command works in a macOS/Linux shell. Search covers the Markdown
 bookmark content, including URLs, titles, tags, and summaries.
 
+With the npm companion, set `BOOKMARK_VAULT` in the CLI terminal as shown above
+and run:
+
+```powershell
+npm run bookmark -- find database
+```
+
 Open the first matching bookmark in the host's default browser:
 
 ```powershell
 docker compose exec bookmarkd node src/cli.js open database
 ```
+
+For the npm workflow, use `npm run bookmark -- open database` instead.
 
 Use `open QUERY --dry-run` to print the URL without launching a browser.
 
