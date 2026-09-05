@@ -19,7 +19,7 @@ BOOKMARK_VAULT="$HOME/path/to/private-vault" docker compose up --build
 
 Load `extension/` as an unpacked Chrome extension, then save tabs from its popup.
 
-Run all tests:
+Run quality checks and all tests:
 
 ```powershell
 docker compose run --rm quality

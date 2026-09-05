@@ -191,9 +191,10 @@ vault:
 docker compose run --rm e2e
 ```
 
-To run all automated tests—vault, CLI, and Chrome extension—in one command:
+To run all quality checks—ESLint, vault, CLI, and Chrome extension:
 
 ```powershell
+docker compose run --rm quality
 docker compose run --rm all-tests
 ```
 

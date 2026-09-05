@@ -50,6 +50,7 @@ the CLI.
 ## Verification
 
 ```powershell
+docker compose run --rm quality
 docker compose run --rm all-tests
 ```
 
