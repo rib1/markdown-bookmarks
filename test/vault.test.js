@@ -4,14 +4,13 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  BOOKMARK_SCHEMA_VERSION,
   findBookmarks,
   initVault,
   installVaultSkill,
-  migrateVault,
   saveBookmark,
   vaultRoot
 } from '../src/vault.js';
+import { BOOKMARK_SCHEMA_VERSION, migrateVault } from '../src/migrations/index.js';
 
 function metadataList(content, field) {
   const match = content.match(new RegExp(`^${field}:\\n((?: {2}(?:- [^\\r\\n]*|\\[\\])\\n?)*)`, 'm'));

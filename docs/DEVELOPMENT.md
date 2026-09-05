@@ -91,6 +91,11 @@ version and updates the manifest after every bookmark succeeds. File writes are
 atomic, migrations are idempotent, and unknown metadata is preserved. Migrations
 never commit or push the private vault.
 
+Each upgrade lives in its own numbered file under `src/migrations/` (for
+example, `001-bookmark-schema-v1.js`). Register new upgrades in
+`src/migrations/index.js`; keep the runner generic and do not add migration
+details to `src/vault.js`.
+
 Schema version 1 adds per-bookmark `schema_version`, backfills safe core fields,
 renames `first_opened_at`, `last_opened_at`, and `access_count` to their `saved`
 equivalents, and removes save-history values accidentally copied into `tags`.

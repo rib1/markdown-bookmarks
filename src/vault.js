@@ -1,10 +1,21 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import {
+  normalizeUrl,
+  readList,
+  readScalar,
+  replaceList,
+  replaceScalar,
+  yamlList
+} from './bookmark-format.js';
+import {
+  BOOKMARK_SCHEMA_VERSION,
+  VAULT_SCHEMA_FILE,
+  migrateBookmarkContent,
+  migrateVault
+} from './migrations/index.js';
 import { applySitePlugins } from './site-plugins.js';
-
-export const BOOKMARK_SCHEMA_VERSION = 1;
-const VAULT_SCHEMA_FILE = '.markdown-bookmarks.json';
 
 export function vaultRoot() {
   return process.env.BOOKMARK_VAULT || process.env.VAULT_PATH || path.resolve('vault');
@@ -60,19 +71,8 @@ export async function initVault(root, { installSkill = true } = {}) {
   return root;
 }
 
-function normalizeUrl(value) {
-  const url = new URL(value);
-  url.hash = '';
-  if (url.pathname !== '/') url.pathname = url.pathname.replace(/\/$/, '');
-  return url.toString();
-}
-
 function slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'bookmark';
-}
-
-function yamlList(values) {
-  return values.length ? values.map((v) => `  - ${JSON.stringify(v)}`).join('\n') : '  []';
 }
 
 async function findBookmarkByUrl(url, root) {
@@ -82,191 +82,6 @@ async function findBookmarkByUrl(url, root) {
     if (match && normalizeUrl(match[1]) === normalized) return result;
   }
   return undefined;
-}
-
-function replaceScalar(content, field, value) {
-  const line = `${field}: ${JSON.stringify(value)}`;
-  const pattern = new RegExp(`^${field}:.*$`, 'm');
-  return pattern.test(content) ? content.replace(pattern, line) : content.replace(/^---\n/, `---\n${line}\n`);
-}
-
-function readScalar(content, field) {
-  const match = content.match(new RegExp(`^${field}:\\s*(.*?)\\s*$`, 'm'));
-  if (!match) return undefined;
-  const value = match[1];
-  try { return JSON.parse(value); } catch { return value.replace(/^["']|["']$/g, ''); }
-}
-
-function removeScalar(content, field) {
-  return content.replace(new RegExp(`^${field}:.*(?:\\n|$)`, 'm'), '');
-}
-
-function replaceList(content, field, values) {
-  const block = `${field}:\n${yamlList(values)}\n`;
-  const pattern = new RegExp(`^${field}:\\n(?:  - .*\\n|  \\[\\]\\n)*`, 'm');
-  if (pattern.test(content)) return content.replace(pattern, block);
-  if (/^tags:/m.test(content)) return content.replace(/^tags:/m, `${block}tags:`);
-  return content.replace(/^---\n/, `---\n${block}`);
-}
-
-function readList(content, field) {
-  const match = content.match(new RegExp(`^${field}:\\r?\\n((?: {2}(?:- [^\\r\\n]*|\\[\\])\\r?\\n?)*)`, 'm'));
-  if (!match) return [];
-  return [...match[1].matchAll(/^ {2}- (.+?)\r?$/gm)].map((item) => {
-    try { return JSON.parse(item[1]); } catch { return item[1].replace(/^["']|["']$/g, ''); }
-  });
-}
-
-async function writeAtomic(file, content) {
-  const temporary = `${file}.migration-${process.pid}-${crypto.randomUUID()}.tmp`;
-  const { mode } = await fs.stat(file).catch(() => ({ mode: undefined }));
-  try {
-    await fs.writeFile(temporary, content, 'utf8');
-    if (mode !== undefined) await fs.chmod(temporary, mode);
-    await fs.rename(temporary, file);
-  } catch (error) {
-    await fs.rm(temporary, { force: true }).catch(() => {});
-    throw error;
-  }
-}
-
-async function ensureVaultGitignore(root) {
-  const file = path.join(root, '.gitignore');
-  let content = '';
-  try { content = await fs.readFile(file, 'utf8'); } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-  if (content.split(/\r?\n/).includes('.DS_Store')) return false;
-  const separator = content && !content.endsWith('\n') ? '\n' : '';
-  if (content) await writeAtomic(file, `${content}${separator}.DS_Store\n`);
-  else await fs.writeFile(file, '.DS_Store\n', 'utf8');
-  return true;
-}
-
-async function readVaultSchemaVersion(root) {
-  const file = path.join(root, VAULT_SCHEMA_FILE);
-  let manifest;
-  try { manifest = JSON.parse(await fs.readFile(file, 'utf8')); } catch (error) {
-    if (error.code === 'ENOENT') return 0;
-    throw new Error(`Cannot read vault schema manifest ${file}: ${error.message}`, { cause: error });
-  }
-  const version = Number(manifest.schema_version);
-  if (!Number.isInteger(version) || version < 0) throw new Error(`Invalid vault schema version: ${manifest.schema_version}`);
-  return version;
-}
-
-async function writeVaultSchemaVersion(root, version) {
-  const file = path.join(root, VAULT_SCHEMA_FILE);
-  await writeAtomic(file, `${JSON.stringify({ schema_version: version }, null, 2)}\n`);
-}
-
-function migrateToSchemaVersion1(content) {
-  const savedAt = readScalar(content, 'saved_at');
-  if (!savedAt) throw new Error('Cannot migrate bookmark without saved_at');
-  const url = readScalar(content, 'url');
-  if (!url) throw new Error('Cannot migrate bookmark without url');
-
-  const firstSavedAt = readScalar(content, 'first_saved_at')
-    || readScalar(content, 'first_opened_at') || savedAt;
-  const lastSavedAt = readScalar(content, 'last_saved_at')
-    || readScalar(content, 'last_opened_at') || savedAt;
-  let saveHistory = readList(content, 'save_history');
-  if (!saveHistory.length) {
-    saveHistory = [firstSavedAt];
-    if (lastSavedAt !== firstSavedAt) saveHistory.push(lastSavedAt);
-  }
-  const legacyAccessCount = Number(readScalar(content, 'access_count'));
-  const existingSaveCount = Number(readScalar(content, 'save_count'));
-  const saveCount = Number.isInteger(existingSaveCount) && existingSaveCount > 0
-    ? existingSaveCount
-    : Number.isInteger(legacyAccessCount) && legacyAccessCount > 0 ? legacyAccessCount : saveHistory.length;
-
-  const corruptedTagValues = new Set(saveHistory.map(String));
-  const originalTags = readList(content, 'tags');
-  const tags = originalTags.filter((tag) => !corruptedTagValues.has(String(tag)));
-  const contexts = readList(content, 'contexts');
-  const ambiguousContextTags = tags.filter((tag) => contexts.includes(tag)).length;
-
-  if (!readScalar(content, 'canonical_url')) content = replaceScalar(content, 'canonical_url', normalizeUrl(url));
-  if (!readScalar(content, 'type')) content = replaceScalar(content, 'type', 'bookmark');
-  if (!/^contexts:/m.test(content)) content = replaceList(content, 'contexts', []);
-  if (!/^tags:/m.test(content) || tags.length !== originalTags.length) content = replaceList(content, 'tags', tags);
-  content = replaceScalar(content, 'first_saved_at', firstSavedAt);
-  content = replaceScalar(content, 'last_saved_at', lastSavedAt);
-  content = replaceScalar(content, 'save_count', Math.max(saveCount, saveHistory.length));
-  content = replaceList(content, 'save_history', saveHistory);
-  content = removeScalar(content, 'first_opened_at');
-  content = removeScalar(content, 'last_opened_at');
-  content = removeScalar(content, 'access_count');
-
-  return {
-    content,
-    repairedTags: originalTags.length - tags.length,
-    ambiguousContextTags
-  };
-}
-
-const BOOKMARK_MIGRATIONS = [
-  { version: 1, migrate: migrateToSchemaVersion1 }
-];
-
-export function migrateBookmarkContent(original) {
-  const declaredVersion = readScalar(original, 'schema_version');
-  const parsedVersion = declaredVersion === undefined ? 0 : Number(declaredVersion);
-  if (!Number.isInteger(parsedVersion) || parsedVersion < 0) throw new Error(`Invalid bookmark schema version: ${declaredVersion}`);
-  if (parsedVersion > BOOKMARK_SCHEMA_VERSION) {
-    throw new Error(`Bookmark schema version ${parsedVersion} is newer than supported version ${BOOKMARK_SCHEMA_VERSION}`);
-  }
-
-  let content = original;
-  let version = parsedVersion;
-  let repairedTags = 0;
-  let ambiguousContextTags = 0;
-  for (const migration of BOOKMARK_MIGRATIONS) {
-    if (version >= migration.version) continue;
-    const result = migration.migrate(content);
-    content = replaceScalar(result.content, 'schema_version', migration.version);
-    repairedTags += result.repairedTags;
-    ambiguousContextTags += result.ambiguousContextTags;
-    version = migration.version;
-  }
-  return { content, fromVersion: parsedVersion, toVersion: version, repairedTags, ambiguousContextTags };
-}
-
-export async function migrateVault(root = vaultRoot()) {
-  await fs.mkdir(root, { recursive: true });
-  const gitignoreUpdated = await ensureVaultGitignore(root);
-  const fromSchemaVersion = await readVaultSchemaVersion(root);
-  if (fromSchemaVersion > BOOKMARK_SCHEMA_VERSION) {
-    throw new Error(`Vault schema version ${fromSchemaVersion} is newer than supported version ${BOOKMARK_SCHEMA_VERSION}`);
-  }
-  const result = {
-    fromSchemaVersion,
-    schemaVersion: BOOKMARK_SCHEMA_VERSION,
-    scanned: 0,
-    migrated: 0,
-    repairedTags: 0,
-    ambiguousContextTags: 0,
-    gitignoreUpdated,
-    skipped: fromSchemaVersion === BOOKMARK_SCHEMA_VERSION
-  };
-  if (result.skipped) return result;
-
-  const bookmarks = await findBookmarks('', root);
-  result.scanned = bookmarks.length;
-  for (const bookmark of bookmarks) {
-    let migration;
-    try { migration = migrateBookmarkContent(bookmark.content); } catch (error) {
-      throw new Error(`Failed to migrate ${bookmark.file}: ${error.message}`, { cause: error });
-    }
-    result.repairedTags += migration.repairedTags;
-    result.ambiguousContextTags += migration.ambiguousContextTags;
-    if (migration.content === bookmark.content) continue;
-    await writeAtomic(bookmark.file, migration.content);
-    result.migrated++;
-  }
-  await writeVaultSchemaVersion(root, BOOKMARK_SCHEMA_VERSION);
-  return result;
 }
 
 export async function saveBookmark(input, root = vaultRoot()) {

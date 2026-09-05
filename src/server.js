@@ -1,5 +1,6 @@
 import http from 'node:http';
-import { migrateVault, saveBookmark, vaultRoot } from './vault.js';
+import { migrateVault } from './migrations/index.js';
+import { saveBookmark, vaultRoot } from './vault.js';
 
 const port = Number(process.env.PORT || 8787);
 const vault = vaultRoot();
