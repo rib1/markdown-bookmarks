@@ -1,4 +1,9 @@
 services:
+  quality:
+    build:
+      context: .
+      target: quality
+
   bookmarkd:
     build: .
     ports:

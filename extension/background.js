@@ -1,4 +1,4 @@
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   fetch('http://127.0.0.1:8787/bookmarks', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

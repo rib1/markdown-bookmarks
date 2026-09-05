@@ -85,7 +85,7 @@ test('reuses an existing bookmark and merges tags on duplicate save', async () =
   assert.match(content, /- "first"/);
   assert.match(content, /- "second"/);
   assert.match(content, /save_count: 2/);
-  assert.match(content, /save_history:\n(?:  - .*\n){2}/);
+  assert.match(content, /save_history:\n(?: {2}- .*\n){2}/);
   assert.doesNotMatch(content, /access_count:/);
 });
 
@@ -98,9 +98,9 @@ test('records each save timestamp in save history', async () => {
   const second = await fs.readFile(saved.file, 'utf8');
   assert.match(first, /save_count: 1/);
   assert.match(second, /save_count: 2/);
-  const firstHistory = first.match(/^save_history:\n((?:  - .*\n)+)/m)?.[1];
-  const secondHistory = second.match(/^save_history:\n((?:  - .*\n)+)/m)?.[1];
-  assert.equal((secondHistory?.match(/^  - /gm) || []).length, 2);
+  const firstHistory = first.match(/^save_history:\n((?: {2}- .*\n)+)/m)?.[1];
+  const secondHistory = second.match(/^save_history:\n((?: {2}- .*\n)+)/m)?.[1];
+  assert.equal((secondHistory?.match(/^ {2}- /gm) || []).length, 2);
   assert.notEqual(firstHistory, secondHistory);
 });
 
@@ -120,7 +120,7 @@ test('stores non-LLM page metadata and context', async () => {
     published_at_confidence: 'high', summary: 'A deterministic page summary.'
   }, root);
   const content = await fs.readFile(saved.file, 'utf8');
-  assert.match(content, /contexts:\n  - "work"/);
+  assert.match(content, /contexts:\n {2}- "work"/);
   assert.match(content, /author: "Example Author"/);
   assert.match(content, /published_at: 2026-08-28/);
   assert.match(content, /published_at_source: article-meta/);
@@ -163,7 +163,7 @@ test('Mural bookmarks default to work context', async () => {
   let content = await fs.readFile(saved.file, 'utf8');
   assert.match(content, /type: whiteboard/);
   assert.match(content, /site: mural/);
-  assert.match(content, /contexts:\n  - "work"/);
+  assert.match(content, /contexts:\n {2}- "work"/);
   assert.match(content, /- "mural"/);
 
   await saveBookmark({ url: 'https://app.mural.co/t/team123/m/team456', title: 'Project workshop', contexts: ['personal'] }, root);
@@ -184,13 +184,13 @@ test('applies Confluence and Jira site plugins', async () => {
   const jiraContent = await fs.readFile(jira.file, 'utf8');
   assert.match(confluenceContent, /site: confluence/);
   assert.match(confluenceContent, /type: page/);
-  assert.match(confluenceContent, /contexts:\n  - "work"/);
+  assert.match(confluenceContent, /contexts:\n {2}- "work"/);
   assert.match(confluenceContent, /space_key: "ENG"/);
   assert.match(confluenceContent, /page_id: "12345"/);
   assert.match(confluenceContent, /- "confluence"/);
   assert.match(jiraContent, /site: jira/);
   assert.match(jiraContent, /type: issue/);
-  assert.match(jiraContent, /contexts:\n  - "work"/);
+  assert.match(jiraContent, /contexts:\n {2}- "work"/);
   assert.match(jiraContent, /issue_key: "ENG-42"/);
   assert.match(jiraContent, /project_key: "ENG"/);
   assert.match(jiraContent, /- "jira"/);
@@ -200,8 +200,8 @@ test('applies Confluence and Jira site plugins', async () => {
     url: 'https://team.atlassian.net/browse/ENG-43', title: 'Personal issue', contexts: ['personal']
   }, root);
   const personalContent = await fs.readFile(personalJira.file, 'utf8');
-  assert.match(personalContent, /contexts:\n  - "personal"/);
-  assert.doesNotMatch(personalContent, /contexts:\n  - "work"/);
+  assert.match(personalContent, /contexts:\n {2}- "personal"/);
+  assert.doesNotMatch(personalContent, /contexts:\n {2}- "work"/);
 });
 
 test('backfills Jira metadata on duplicate save', async () => {

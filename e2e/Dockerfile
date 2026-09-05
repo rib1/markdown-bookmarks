@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.55.0-noble
+FROM mcr.microsoft.com/playwright:v1.62.1-noble
 WORKDIR /e2e
 COPY e2e/package.json ./package.json
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1

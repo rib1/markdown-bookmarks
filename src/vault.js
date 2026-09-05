@@ -95,7 +95,7 @@ function replaceList(content, field, values) {
 function readList(content, field) {
   const match = content.match(new RegExp(`^${field}:\\n((?:  - .*\\n|  \\[\\]\\n)*)`, 'm'));
   if (!match) return [];
-  return [...match[1].matchAll(/^  - ["']?([^"'\r\n]+)["']?$/gm)].map((item) => item[1]);
+  return [...match[1].matchAll(/^ {2}- ["']?([^"'\r\n]+)["']?$/gm)].map((item) => item[1]);
 }
 
 export async function saveBookmark(input, root = vaultRoot()) {
@@ -107,12 +107,12 @@ export async function saveBookmark(input, root = vaultRoot()) {
   const canonicalUrl = normalizeUrl(input.url);
   const existing = await findBookmarkByUrl(canonicalUrl, root);
   if (existing) {
-    const oldTags = [...existing.content.matchAll(/^  - ["']?([^"'\r\n]+)["']?$/gm)].map((match) => match[1]);
+    const oldTags = [...existing.content.matchAll(/^ {2}- ["']?([^"'\r\n]+)["']?$/gm)].map((match) => match[1]);
     const mergedTags = [...new Set([...oldTags, ...tags])];
     let content = existing.content;
     content = replaceList(content, 'tags', mergedTags);
     if (input.contexts?.length) {
-      const oldContexts = [...existing.content.matchAll(/^contexts:\n(?:  - ["']?([^"'\r\n]+)["']?\n|  \[\]\n)*/gm)].map((match) => match[1]).filter(Boolean);
+      const oldContexts = [...existing.content.matchAll(/^contexts:\n(?: {2}- ["']?([^"'\r\n]+)["']?\n| {2}\[\]\n)*/gm)].map((match) => match[1]).filter(Boolean);
       content = replaceList(content, 'contexts', [...new Set([...oldContexts, ...input.contexts])]);
     }
     for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'space_key', 'page_id', 'issue_key', 'project_key', 'published_at', 'published_at_source', 'published_at_confidence']) {
