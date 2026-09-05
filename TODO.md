@@ -7,7 +7,7 @@ prototype sessions.
 
 - [ ] Add a real CLI configuration command that stores the selected vault path
       for future invocations without requiring `BOOKMARK_VAULT` every time.
-- [ ] Add a simple host wrapper or standalone CLI workflow so users do not need
+- [x] Add a simple host wrapper or standalone CLI workflow so users do not need
       to run `docker compose exec ...` for normal use.
 - [ ] Add a `dedupe` command to preview and safely merge existing duplicate
       bookmarks, preserving tags, metadata, notes, and access history.
@@ -21,7 +21,7 @@ prototype sessions.
 - [ ] Save all tabs in a tab group.
 - [ ] Capture browser tab groups as contexts or projects when requested.
 - [ ] Record browser access events, not only save events.
-- [ ] Improve error messages when the companion is stopped or unreachable.
+- [x] Improve error messages when the companion is stopped or unreachable.
 - [ ] Test the extension on Chrome/Chromium on both Windows and macOS.
 - [ ] Test Firefox compatibility.
 - [ ] Package and document browser extension installation for eventual store
@@ -29,7 +29,7 @@ prototype sessions.
 
 ## Metadata extraction
 
-- [ ] Improve generic author extraction and publication-date detection.
+- [x] Improve generic author extraction and publication-date detection.
 - [ ] Store extraction provenance and confidence consistently for all generated
       metadata.
 - [ ] Add canonical URL handling for more sites.
@@ -47,7 +47,7 @@ prototype sessions.
 - [x] Add site-plugin tests for GitHub and YouTube metadata and legacy GitHub
       bookmark enrichment.
 - [ ] Add duplicate-save backfill tests specifically for YouTube metadata.
-- [ ] Document how to add a new site plugin.
+- [x] Document how to add a new site plugin.
 - [ ] Consider plugins for common article, PDF, podcast, and social sites.
 - [x] Add Confluence and Jira site metadata plugins and tests.
 
@@ -76,7 +76,7 @@ prototype sessions.
 - [x] Add `open QUERY` and `open QUERY --dry-run`.
 - [ ] Add structured output such as `--json` and `--jsonl`.
 - [ ] Add tag, context, project, event, site, type, and status filters.
-- [ ] Add ranking and stable result ordering.
+- [x] Add ranking and stable result ordering.
 - [ ] Add a rebuildable SQLite FTS index when plain recursive search becomes too
       slow.
 
@@ -91,10 +91,10 @@ prototype sessions.
 
 ## Git integration
 
-- [ ] Keep Git operations user-controlled by default.
+- [x] Keep Git operations user-controlled by default.
 - [ ] Add CLI guidance for status, diff, commit, pull, and push.
 - [ ] Add optional local commit modes: manual, on-save, or daily.
-- [ ] Never put Git credentials in the browser extension.
+- [x] Never put Git credentials in the browser extension.
 - [ ] Test the private vault workflow with GitHub and GitLab remotes.
 - [ ] Add safeguards against accidentally initializing or pushing a public vault.
 
@@ -106,7 +106,7 @@ prototype sessions.
 - [ ] Add explicit read-only and edit modes to the skill guidance.
 - [ ] Decide whether summaries remain manual/deterministic or support optional
       external/local models.
-- [ ] Ensure LLM workflows never expose vault content without user approval.
+- [x] Ensure LLM workflows never expose vault content without user approval.
 
 ## Distribution and cross-platform packaging
 
