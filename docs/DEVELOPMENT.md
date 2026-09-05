@@ -56,8 +56,8 @@ Use stable IDs and preserve unknown fields when editing. Supported metadata
 includes `url`, `canonical_url`, `title`, `type`, `site`, `contexts`, `areas`,
 `projects`, `events`, `tags`, `status`, `priority`, `author`, `published_at`,
 `published_at_source`, `published_at_confidence`, `saved_at`,
-`first_saved_at`, `last_saved_at`, `save_count`, `save_history`, `summary`, and
-`related`.
+`first_saved_at`, `last_saved_at`, `save_count`, `save_history`,
+`schema_version`, `summary`, and `related`.
 
 Keep these concepts distinct:
 
@@ -82,6 +82,28 @@ Keep these concepts distinct:
   `save_history`.
 - Backfill new plugin metadata into legacy records.
 - Do not delete duplicates automatically; provide a preview-based command later.
+
+## Schema migration rules
+
+The vault-level `.markdown-bookmarks.json` file records the current schema
+version. Before the HTTP server starts, it runs only migrations newer than that
+version and updates the manifest after every bookmark succeeds. File writes are
+atomic, migrations are idempotent, and unknown metadata is preserved. Migrations
+never commit or push the private vault.
+
+Each upgrade lives in its own numbered file under `src/migrations/` (for
+example, `001-bookmark-schema-v1.js`). Register new upgrades in
+`src/migrations/index.js`; keep the runner generic and do not add migration
+details to `src/vault.js`. A migration module exports its `script`,
+`fromVersion`, and target `version` so startup logging can identify exactly
+which upgrade ran.
+
+Schema version 1 adds per-bookmark `schema_version`, backfills safe core fields,
+renames `first_opened_at`, `last_opened_at`, and `access_count` to their `saved`
+equivalents, and removes save-history values accidentally copied into `tags`.
+Context values that also appear as tags are retained because they may be
+intentional. Vault initialization and migration also ignore macOS `.DS_Store`
+files without replacing existing `.gitignore` rules.
 
 ## Site plugin rules
 

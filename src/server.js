@@ -1,8 +1,10 @@
 import http from 'node:http';
+import { migrateVault } from './migrations/index.js';
 import { saveBookmark, vaultRoot } from './vault.js';
 
 const port = Number(process.env.PORT || 8787);
 const vault = vaultRoot();
+const migration = await migrateVault(vault);
 
 function send(response, status, body) {
   response.writeHead(status, {
@@ -29,4 +31,13 @@ const server = http.createServer(async (request, response) => {
   });
 });
 
-server.listen(port, '0.0.0.0', () => console.log(`bookmark companion listening on ${port}; vault: ${vault}`));
+server.listen(port, '0.0.0.0', () => {
+  const migrationLog = migration.migrationsRun.length
+    ? migration.migrationsRun.map(({ script, fromVersion, toVersion }) =>
+      `vault migration ran: ${script}; schema: ${fromVersion} -> ${toVersion}`)
+    : [`vault migrations: none; schema remains: ${migration.schemaVersion}`];
+  console.log([
+    ...migrationLog,
+    `bookmark companion listening on ${port}; vault: ${vault}; schema: ${migration.schemaVersion}; migrated: ${migration.migrated}`
+  ].join('\n'));
+});

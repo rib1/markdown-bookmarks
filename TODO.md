@@ -63,7 +63,7 @@ prototype sessions.
 - [ ] Add commands for adding and removing tags, contexts, projects, events,
       and relationships.
 - [ ] Add validation for frontmatter and stable IDs.
-- [ ] Add migration handling for future schema changes.
+- [x] Add versioned, idempotent migration handling for bookmark schema changes.
 - [ ] Add optional generated views for projects, contexts, events, unread items,
       and recent activity.
 

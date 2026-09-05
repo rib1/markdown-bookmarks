@@ -98,6 +98,12 @@ start it in the background with `docker compose up --build -d`. Stop it with
 `docker compose down`.
 
 The same configured vault is used by the companion service and its CLI.
+On startup, the companion compares `.markdown-bookmarks.json` with the current
+application schema and runs pending Markdown migrations before accepting saves.
+It reports each migration script and version transition, or says that no
+migrations ran, followed by the current schema and migrated-file count. Review
+and commit resulting private-vault changes with host Git; the companion never
+commits or pushes them.
 
 ## Run without Docker using npm
 
@@ -123,6 +129,8 @@ npm start
 The API listens at `http://127.0.0.1:8787`. Keep that terminal open while using
 the extension and press `Ctrl+C` to stop the companion. This is a direct way to
 run the current prototype, not the future self-contained companion binary.
+The same automatic schema migration described above runs before the npm server
+starts listening.
 
 ## Install the extension
 

@@ -3,7 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { saveBookmark, findBookmarks, initVault, installVaultSkill, vaultRoot } from '../src/vault.js';
+import {
+  findBookmarks,
+  initVault,
+  installVaultSkill,
+  saveBookmark,
+  vaultRoot
+} from '../src/vault.js';
+import { BOOKMARK_SCHEMA_VERSION, migrateVault } from '../src/migrations/index.js';
+
+function metadataList(content, field) {
+  const match = content.match(new RegExp(`^${field}:\\n((?: {2}(?:- [^\\r\\n]*|\\[\\])\\n?)*)`, 'm'));
+  if (!match) return [];
+  return [...match[1].matchAll(/^ {2}- (.+)$/gm)].map((item) => JSON.parse(item[1]));
+}
 
 test('uses the Docker VAULT_PATH when BOOKMARK_VAULT is not set', { concurrency: false }, () => {
   const previousBookmarkVault = process.env.BOOKMARK_VAULT;
@@ -32,8 +45,12 @@ test('initializes a vault and installs the LLM skill without overwriting README'
     }
     const readme = path.join(root, 'README.md');
     const attributes = path.join(root, '.gitattributes');
+    const ignore = path.join(root, '.gitignore');
+    const schema = path.join(root, '.markdown-bookmarks.json');
     const skill = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
     assert.equal(await fs.readFile(attributes, 'utf8'), '* text=auto eol=lf\n');
+    assert.equal(await fs.readFile(ignore, 'utf8'), '.DS_Store\n');
+    assert.deepEqual(JSON.parse(await fs.readFile(schema, 'utf8')), { schema_version: BOOKMARK_SCHEMA_VERSION });
     const readmeContent = await fs.readFile(readme, 'utf8');
     assert.match(readmeContent, /# Private bookmark vault/);
     assert.match(readmeContent, /`bookmarks\/`/);
@@ -46,6 +63,96 @@ test('initializes a vault and installs the LLM skill without overwriting README'
     if (previousSkillSource === undefined) delete process.env.SKILL_SOURCE;
     else process.env.SKILL_SOURCE = previousSkillSource;
   }
+});
+
+test('migrates legacy save attributes and repairs definite tag contamination once', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-migration-'));
+  const directory = path.join(root, 'bookmarks', '2026', '09');
+  const file = path.join(directory, 'legacy-bookmark.md');
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(path.join(root, '.gitignore'), 'local-cache/\n', 'utf8');
+  await fs.writeFile(file, `---
+id: legacy
+url: "https://example.test/legacy#section"
+title: "Legacy bookmark"
+contexts:
+  - "work"
+tags:
+  - "reference"
+  - "work"
+  - "2026-09-01T10:00:00.000Z"
+saved_at: 2026-09-01T09:00:00.000Z
+first_opened_at: 2026-09-01T09:00:00.000Z
+last_opened_at: 2026-09-01T10:00:00.000Z
+access_count: 2
+save_history:
+  - "2026-09-01T09:00:00.000Z"
+  - "2026-09-01T10:00:00.000Z"
+custom_field: "preserved"
+---
+
+## Summary
+
+Legacy data.
+`, 'utf8');
+
+  const first = await migrateVault(root);
+  const migrated = await fs.readFile(file, 'utf8');
+  assert.equal(first.fromSchemaVersion, 0);
+  assert.equal(first.schemaVersion, BOOKMARK_SCHEMA_VERSION);
+  assert.deepEqual(first.migrationsRun, [{
+    script: '001-bookmark-schema-v1.js',
+    fromVersion: 0,
+    toVersion: 1
+  }]);
+  assert.equal(first.scanned, 1);
+  assert.equal(first.migrated, 1);
+  assert.equal(first.repairedTags, 1);
+  assert.equal(first.ambiguousContextTags, 1);
+  assert.equal(first.skipped, false);
+  assert.match(migrated, new RegExp(`schema_version: ${BOOKMARK_SCHEMA_VERSION}`));
+  assert.match(migrated, /canonical_url: "https:\/\/example\.test\/legacy"/);
+  assert.match(migrated, /type: "bookmark"/);
+  assert.match(migrated, /first_saved_at: "2026-09-01T09:00:00.000Z"/);
+  assert.match(migrated, /last_saved_at: "2026-09-01T10:00:00.000Z"/);
+  assert.match(migrated, /save_count: 2/);
+  assert.match(migrated, /custom_field: "preserved"/);
+  assert.doesNotMatch(migrated, /first_opened_at:|last_opened_at:|access_count:/);
+  assert.deepEqual(metadataList(migrated, 'tags'), ['reference', 'work']);
+  assert.deepEqual(metadataList(migrated, 'contexts'), ['work']);
+  assert.equal(await fs.readFile(path.join(root, '.gitignore'), 'utf8'), 'local-cache/\n.DS_Store\n');
+  assert.deepEqual(JSON.parse(await fs.readFile(path.join(root, '.markdown-bookmarks.json'), 'utf8')),
+    { schema_version: BOOKMARK_SCHEMA_VERSION });
+
+  const second = await migrateVault(root);
+  assert.equal(second.skipped, true);
+  assert.deepEqual(second.migrationsRun, []);
+  assert.equal(second.scanned, 0);
+  assert.equal(second.migrated, 0);
+  assert.equal(await fs.readFile(file, 'utf8'), migrated);
+});
+
+test('does not advance the vault schema checkpoint when a migration fails', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-failed-migration-'));
+  const directory = path.join(root, 'bookmarks');
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(path.join(directory, 'invalid.md'), `---
+id: invalid
+url: "https://example.test/invalid"
+title: "Missing saved date"
+tags:
+  []
+---
+`, 'utf8');
+  await assert.rejects(() => migrateVault(root), /without saved_at/);
+  await assert.rejects(() => fs.access(path.join(root, '.markdown-bookmarks.json')), { code: 'ENOENT' });
+});
+
+test('rejects a vault schema newer than the application supports', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-future-schema-'));
+  await fs.writeFile(path.join(root, '.markdown-bookmarks.json'),
+    `${JSON.stringify({ schema_version: BOOKMARK_SCHEMA_VERSION + 1 })}\n`, 'utf8');
+  await assert.rejects(() => migrateVault(root), /newer than supported/);
 });
 
 test('installs the LLM skill inside the selected vault', async () => {
@@ -66,6 +173,7 @@ test('saves tagged bookmark and finds it through the CLI index path', async () =
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-'));
   const saved = await saveBookmark({ url: 'https://example.test/postgres', title: 'Postgres Guide', tags: ['work', 'database'] }, root);
   const content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, new RegExp(`schema_version: ${BOOKMARK_SCHEMA_VERSION}`));
   assert.match(content, /- "work"/);
   assert.match(content, /- "database"/);
   assert.match(content, /first_saved_at:/);
@@ -77,8 +185,12 @@ test('saves tagged bookmark and finds it through the CLI index path', async () =
 
 test('reuses an existing bookmark and merges tags on duplicate save', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-dedupe-'));
-  const first = await saveBookmark({ url: 'https://example.test/page/#section', title: 'Example', tags: ['first'] }, root);
-  const second = await saveBookmark({ url: 'https://example.test/page/', title: 'Example again', tags: ['second'] }, root);
+  const first = await saveBookmark({
+    url: 'https://example.test/page/#section', title: 'Example', contexts: ['work'], tags: ['first']
+  }, root);
+  const second = await saveBookmark({
+    url: 'https://example.test/page/', title: 'Example again', contexts: ['travel'], tags: ['second']
+  }, root);
   assert.equal(second.file, first.file);
   assert.equal(second.duplicate, true);
   const content = await fs.readFile(first.file, 'utf8');
@@ -87,6 +199,9 @@ test('reuses an existing bookmark and merges tags on duplicate save', async () =
   assert.match(content, /save_count: 2/);
   assert.match(content, /save_history:\n(?: {2}- .*\n){2}/);
   assert.doesNotMatch(content, /access_count:/);
+  assert.deepEqual(metadataList(content, 'tags'), ['first', 'second']);
+  assert.deepEqual(metadataList(content, 'contexts'), ['work', 'travel']);
+  assert.equal(metadataList(content, 'tags').some((tag) => metadataList(content, 'save_history').includes(tag)), false);
 });
 
 test('records each save timestamp in save history', async () => {
