@@ -55,6 +55,7 @@ export async function initVault(root, { installSkill = true } = {}) {
       '- `events/` - life-event records linked from bookmarks',
       '- `assets/` - optional saved page content and images',
       '- `views/` - optional generated lists and searches',
+      '- `AGENTS.md` - companion-managed instructions for LLM agents working in this vault',
       '- `.codex/skills/` - LLM instructions for working safely with this vault',
       `- \`${VAULT_SCHEMA_FILE}\` - vault schema version used for automatic migrations`,
       '',

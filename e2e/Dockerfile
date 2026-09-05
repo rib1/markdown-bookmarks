@@ -7,6 +7,7 @@ COPY e2e/test.mjs ./test.mjs
 COPY e2e/all-tests.sh ./all-tests.sh
 COPY extension ./extension
 COPY src ./src
+COPY templates ./templates
 COPY test ./test
 COPY skills ./skills
 CMD ["sh", "-c", "VAULT_PATH=/vault PORT=8787 node src/server.js & xvfb-run -a node test.mjs"]

@@ -47,6 +47,7 @@ test('initializes a vault and installs the LLM skill without overwriting README'
     const attributes = path.join(root, '.gitattributes');
     const ignore = path.join(root, '.gitignore');
     const schema = path.join(root, '.markdown-bookmarks.json');
+    const vaultAgents = path.join(root, 'AGENTS.md');
     const skill = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
     assert.equal(await fs.readFile(attributes, 'utf8'), '* text=auto eol=lf\n');
     assert.equal(await fs.readFile(ignore, 'utf8'), '.DS_Store\n');
@@ -55,6 +56,8 @@ test('initializes a vault and installs the LLM skill without overwriting README'
     assert.match(readmeContent, /# Private bookmark vault/);
     assert.match(readmeContent, /`bookmarks\/`/);
     assert.match(readmeContent, /`\.codex\/skills\/`/);
+    assert.equal(await fs.readFile(vaultAgents, 'utf8'),
+      await fs.readFile(path.resolve('templates', 'vault', 'AGENTS.md'), 'utf8'));
     assert.match(await fs.readFile(skill, 'utf8'), /Markdown bookmark vault/);
     await fs.writeFile(readme, 'my custom vault README\n', 'utf8');
     await initVault(root);
@@ -123,13 +126,34 @@ Legacy data.
   assert.equal(await fs.readFile(path.join(root, '.gitignore'), 'utf8'), 'local-cache/\n.DS_Store\n');
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(root, '.markdown-bookmarks.json'), 'utf8')),
     { schema_version: BOOKMARK_SCHEMA_VERSION });
-
   const second = await migrateVault(root);
   assert.equal(second.skipped, true);
   assert.deepEqual(second.migrationsRun, []);
   assert.equal(second.scanned, 0);
   assert.equal(second.migrated, 0);
   assert.equal(await fs.readFile(file, 'utf8'), migrated);
+});
+
+test('installs and refreshes vault AGENTS.md when migrations are checked', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-agents-'));
+  const target = path.join(root, 'AGENTS.md');
+  const template = await fs.readFile(path.resolve('templates', 'vault', 'AGENTS.md'), 'utf8');
+
+  const first = await migrateVault(root);
+  assert.equal(first.agentInstructions, 'installed');
+  assert.equal(await fs.readFile(target, 'utf8'), template);
+  assert.match(template, /Do not assume the application repository/);
+  assert.match(template, /How to search/);
+
+  await fs.writeFile(target, 'stale vault instructions\n', 'utf8');
+  const second = await migrateVault(root);
+  assert.equal(second.skipped, true);
+  assert.equal(second.agentInstructions, 'updated');
+  assert.equal(await fs.readFile(target, 'utf8'), template);
+
+  const third = await migrateVault(root);
+  assert.equal(third.agentInstructions, 'current');
+  assert.equal(await fs.readFile(target, 'utf8'), template);
 });
 
 test('does not advance the vault schema checkpoint when a migration fails', async () => {

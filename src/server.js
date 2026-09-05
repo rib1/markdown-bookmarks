@@ -38,6 +38,7 @@ server.listen(port, '0.0.0.0', () => {
     : [`vault migrations: none; schema remains: ${migration.schemaVersion}`];
   console.log([
     ...migrationLog,
+    `vault AGENTS.md: ${migration.agentInstructions}`,
     `bookmark companion listening on ${port}; vault: ${vault}; schema: ${migration.schemaVersion}; migrated: ${migration.migrated}`
   ].join('\n'));
 });

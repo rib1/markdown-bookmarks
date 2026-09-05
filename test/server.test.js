@@ -67,6 +67,7 @@ access_count: 1
   assert.match(message, /bookmark companion listening/);
   assert.match(message, new RegExp(`vault: ${bookmarkVault.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(message, /vault migration ran: 001-bookmark-schema-v1\.js; schema: 0 -> 1/);
+  assert.match(message, /vault AGENTS\.md: installed/);
   assert.match(message, /schema: 1; migrated: 1/);
   const migratedLegacy = await fs.readFile(legacyFile, 'utf8');
   assert.match(migratedLegacy, /schema_version: 1/);

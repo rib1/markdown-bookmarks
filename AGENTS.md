@@ -39,6 +39,7 @@ the CLI.
 - Prefer typed relationships such as `references`, `supports`, `alternative`, `follow-up`, and `duplicate`.
 - Store the vault schema version in `.markdown-bookmarks.json`. Migrations must be idempotent, preserve unknown metadata, and update the vault version only after every file succeeds.
 - Keep each schema upgrade in its own numbered file under `src/migrations/` and register it in `src/migrations/index.js`.
+- Keep `templates/vault/AGENTS.md` aligned with current vault structure, metadata, privacy rules, and search guidance. Migration/startup must install or refresh it in the vault root without assuming the vault has access to application tools.
 
 ## Development rules
 

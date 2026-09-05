@@ -54,9 +54,12 @@ docker compose run --rm bookmarkd node src/cli.js init
 
 The command creates the standard vault directories, a README, and a
 `.gitattributes` file that normalizes text files to Unix LF line endings. It
-does not overwrite existing files. It also installs the generic vault-management
+does not overwrite those existing files. It installs a companion-managed
+`AGENTS.md` in the vault root with portable structure, privacy, editing, and
+search instructions for LLM agents. It also installs the generic vault-management
 LLM skill at `.codex/skills/markdown-bookmark-vault/SKILL.md`. Use `--no-skill`
-if you do not want the skill copied into the vault.
+if you do not want the optional skill copied into the vault; `AGENTS.md` is
+still installed.
 
 For an existing vault, install or refresh only the vault-local skill with:
 
@@ -101,8 +104,9 @@ The same configured vault is used by the companion service and its CLI.
 On startup, the companion compares `.markdown-bookmarks.json` with the current
 application schema and runs pending Markdown migrations before accepting saves.
 It reports each migration script and version transition, or says that no
-migrations ran, followed by the current schema and migrated-file count. Review
-and commit resulting private-vault changes with host Git; the companion never
+migrations ran. The same startup pass installs or refreshes the vault-root
+`AGENTS.md`, then reports the current schema and migrated-file count. Review and
+commit resulting private-vault changes with host Git; the companion never
 commits or pushes them.
 
 ## Run without Docker using npm
