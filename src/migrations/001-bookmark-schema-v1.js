@@ -8,6 +8,8 @@ import {
 } from '../bookmark-format.js';
 
 export const version = 1;
+export const fromVersion = 0;
+export const script = '001-bookmark-schema-v1.js';
 
 export function migrate(content) {
   const savedAt = readScalar(content, 'saved_at');

@@ -100,9 +100,10 @@ start it in the background with `docker compose up --build -d`. Stop it with
 The same configured vault is used by the companion service and its CLI.
 On startup, the companion compares `.markdown-bookmarks.json` with the current
 application schema and runs pending Markdown migrations before accepting saves.
-It reports the schema and migrated-file count in the startup message. Review and
-commit resulting private-vault changes with host Git; the companion never commits
-or pushes them.
+It reports each migration script and version transition, or says that no
+migrations ran, followed by the current schema and migrated-file count. Review
+and commit resulting private-vault changes with host Git; the companion never
+commits or pushes them.
 
 ## Run without Docker using npm
 

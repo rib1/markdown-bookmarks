@@ -66,6 +66,7 @@ access_count: 1
   const [message] = await once(server.stdout, 'data', { signal: AbortSignal.timeout(5000) });
   assert.match(message, /bookmark companion listening/);
   assert.match(message, new RegExp(`vault: ${bookmarkVault.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(message, /vault migration ran: 001-bookmark-schema-v1\.js; schema: 0 -> 1/);
   assert.match(message, /schema: 1; migrated: 1/);
   const migratedLegacy = await fs.readFile(legacyFile, 'utf8');
   assert.match(migratedLegacy, /schema_version: 1/);

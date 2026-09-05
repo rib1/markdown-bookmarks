@@ -103,6 +103,13 @@ export async function migrateVault(root) {
   const result = {
     fromSchemaVersion,
     schemaVersion: BOOKMARK_SCHEMA_VERSION,
+    migrationsRun: BOOKMARK_MIGRATIONS
+      .filter((migration) => migration.version > fromSchemaVersion)
+      .map((migration) => ({
+        script: migration.script,
+        fromVersion: migration.fromVersion,
+        toVersion: migration.version
+      })),
     scanned: 0,
     migrated: 0,
     repairedTags: 0,

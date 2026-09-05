@@ -100,6 +100,11 @@ Legacy data.
   const migrated = await fs.readFile(file, 'utf8');
   assert.equal(first.fromSchemaVersion, 0);
   assert.equal(first.schemaVersion, BOOKMARK_SCHEMA_VERSION);
+  assert.deepEqual(first.migrationsRun, [{
+    script: '001-bookmark-schema-v1.js',
+    fromVersion: 0,
+    toVersion: 1
+  }]);
   assert.equal(first.scanned, 1);
   assert.equal(first.migrated, 1);
   assert.equal(first.repairedTags, 1);
@@ -121,6 +126,7 @@ Legacy data.
 
   const second = await migrateVault(root);
   assert.equal(second.skipped, true);
+  assert.deepEqual(second.migrationsRun, []);
   assert.equal(second.scanned, 0);
   assert.equal(second.migrated, 0);
   assert.equal(await fs.readFile(file, 'utf8'), migrated);
