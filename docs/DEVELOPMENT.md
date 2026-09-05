@@ -128,7 +128,8 @@ Site plugins are URL-driven, deterministic, and independently testable.
 - Jira: add site, issue type, issue/project identifiers, `jira` tag, and default
   `work` context when no context is supplied.
 
-Add plugins to the registry. Test new records, duplicate saves, and legacy
+Keep each plugin in its own `src/site-plugins/<name>.js` module and register it
+in `src/site-plugins/index.js`. Test new records, duplicate saves, and legacy
 metadata enrichment.
 
 ## Browser extension rules
@@ -170,7 +171,8 @@ browser alias or an explicit application/executable in native mode. Its
 `--dry-run` prints the resolved bookmark URL without launching a browser.
 `open --help` documents every launch option and gives linked search/open
 workflow examples. Docker cannot launch host applications, so it prints the
-selected URL instead.
+selected URL instead. Native launch failures print the target for manual
+opening without a stack trace and return a nonzero status.
 
 Vault configuration must be consistent between server and CLI:
 

@@ -15,7 +15,7 @@ import {
   migrateBookmarkContent,
   migrateVault
 } from './migrations/index.js';
-import { applySitePlugins } from './site-plugins.js';
+import { applySitePlugins } from './site-plugins/index.js';
 import { vaultRoot } from './vault-path.js';
 
 export { vaultRoot } from './vault-path.js';

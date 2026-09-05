@@ -276,6 +276,10 @@ You can also give a macOS application name or a Windows/Linux executable name
 or path. Browser launching is available only in the native npm workflow;
 Docker cannot launch applications on the host.
 
+If the selected browser is missing or cannot start, the CLI prints a clear
+message and the target URL for manual opening, without a stack trace. The
+command returns a nonzero status so scripts can detect that launching failed.
+
 If several bookmarks match, `open` shows a numbered list and asks which one to
 open. Enter a short number such as `2`; there is no need to type the bookmark
 ID. For scripts or other non-interactive use, select the same numbered result

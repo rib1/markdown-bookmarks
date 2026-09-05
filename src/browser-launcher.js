@@ -26,14 +26,25 @@ export function browserCommand(target, platform = process.platform, browser) {
   return { command: platform === 'darwin' ? 'open' : 'xdg-open', args: [target] };
 }
 
-export function openInBrowser(target, browser, platform = process.platform) {
+export function openInBrowser(target, browser, platform = process.platform, spawnProcess = spawn) {
   const { command, args } = browserCommand(target, platform, browser);
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+    const child = spawnProcess(command, args, { detached: true, stdio: 'ignore' });
     child.once('error', reject);
-    child.once('spawn', () => {
-      child.unref();
-      resolve();
-    });
+    if (platform === 'darwin') {
+      child.once('exit', (code) => {
+        if (code === 0) resolve();
+        else {
+          const error = new Error(`macOS open command exited with code ${code}`);
+          error.code = 'BROWSER_LAUNCH_FAILED';
+          reject(error);
+        }
+      });
+    } else {
+      child.once('spawn', () => {
+        child.unref();
+        resolve();
+      });
+    }
   });
 }

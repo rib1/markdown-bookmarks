@@ -39,6 +39,8 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /Without --pick, an interactive terminal displays a numbered menu/);
   assert.match(openHelp.stdout, /With --pick NUMBER, that menu is skipped/);
   assert.match(openHelp.stdout, /--pick=NUMBER is also accepted/);
+  assert.match(openHelp.stdout, /If the selected browser is missing or cannot start/);
+  assert.match(openHelp.stdout, /target link for manual opening/);
   assert.match(openHelp.stdout, /--with BROWSER/);
   assert.match(openHelp.stdout, /--dry-run/);
   assert.match(openHelp.stdout, /chrome, edge, firefox, brave/);
@@ -112,6 +114,18 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   assert.doesNotMatch(directlyPicked.stdout, /Multiple bookmarks found|Choose a bookmark/);
   assert.equal(await readEventually(browserCapture), 'https://example.test/cli-second');
 
+  const missingBrowser = path.join(root, 'browser-that-does-not-exist');
+  await assert.rejects(
+    () => run(process.execPath,
+      [cli, 'open', 'amiga', '--pick', '1', '--with', missingBrowser], { env }),
+    (error) => {
+      assert.match(error.stderr, /Could not launch browser .*application or executable was not found/);
+      assert.doesNotMatch(error.stderr, /\n\s+at /);
+      assert.equal(error.stdout.trim(), 'Open this link manually:\nhttps://example.test/cli');
+      return true;
+    }
+  );
+
   const selectedBrowser = await run(process.execPath,
     [cli, 'open', '--with', 'firefox', '--pick', '1', 'amiga', '--dry-run'], { env });
   assert.equal(selectedBrowser.stdout.trim(), 'https://example.test/cli');
@@ -147,6 +161,19 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   assert.ok(printedPageUrl, 'expected a standalone search-results file link');
   assert.equal(await readEventually(nativePageCapture), printedPageUrl);
   assert.match(nativeBrowserSearch.stdout, /Opened 2 bookmark results in the browser/);
+
+  await assert.rejects(
+    () => run(process.execPath,
+      [cli, 'find', 'amiga', '--browser', '--with', missingBrowser], { env }),
+    (error) => {
+      assert.match(error.stderr, /Could not launch browser .*application or executable was not found/);
+      assert.doesNotMatch(error.stderr, /\n\s+at /);
+      assert.match(error.stdout, /Search results file:\nfile:\/\/\//);
+      assert.match(error.stdout, /Open the search results link above manually/);
+      assert.doesNotMatch(error.stdout, /Opened 2 bookmark results/);
+      return true;
+    }
+  );
 
   const dockerBrowserSearch = await run(process.execPath,
     [cli, 'find', 'amiga', '--browser'], {

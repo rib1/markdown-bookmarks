@@ -48,6 +48,26 @@ function printOpenChoices(results) {
   });
 }
 
+async function launchBrowserOrExplain(target, browser, { linkAlreadyPrinted = false } = {}) {
+  try {
+    await openInBrowser(target, browser);
+    return true;
+  } catch (error) {
+    const browserLabel = browser ? `browser "${browser}"` : 'the default browser';
+    const reason = error.code === 'ENOENT'
+      ? 'the application or executable was not found'
+      : 'the application could not be opened';
+    console.error(`Could not launch ${browserLabel}: ${reason}.`);
+    if (linkAlreadyPrinted) console.log('Open the search results link above manually.');
+    else {
+      console.log('Open this link manually:');
+      console.log(target);
+    }
+    process.exitCode = 1;
+    return false;
+  }
+}
+
 function printOpenHelp() {
   console.log(`Usage: npm run bookmark -- open QUERY [options]
 
@@ -70,6 +90,10 @@ Multiple matches:
   Without --pick, an interactive terminal displays a numbered menu and asks
   you to choose. With --pick NUMBER, that menu is skipped and the numbered
   match for the current query opens directly. --pick=NUMBER is also accepted.
+
+Launch failures:
+  If the selected browser is missing or cannot start, the command prints the
+  target link for manual opening and exits with a nonzero status.
 
 Examples:
   npm run bookmark -- open database
@@ -182,8 +206,8 @@ if (command === 'help' || command === '--help' || command === '-h') {
       console.log('Search results file:');
       console.log(pageUrl);
       if (!hostVaultPath) {
-        await openInBrowser(pageUrl, selectedBrowser);
-        console.log(`Opened ${page.count} bookmark result${page.count === 1 ? '' : 's'} in the browser.`);
+        const launched = await launchBrowserOrExplain(pageUrl, selectedBrowser, { linkAlreadyPrinted: true });
+        if (launched) console.log(`Opened ${page.count} bookmark result${page.count === 1 ? '' : 's'} in the browser.`);
       }
     }
   } else {
@@ -209,7 +233,7 @@ if (command === 'help' || command === '--help' || command === '-h') {
     } else if (process.env.BOOKMARK_RESULTS_HOST_VAULT) {
       console.log(`Open bookmark${selectedBrowser ? ` in ${selectedBrowser}` : ''}: ${url}`);
     } else {
-      await openInBrowser(url, selectedBrowser);
+      await launchBrowserOrExplain(url, selectedBrowser);
     }
   }
 } else {

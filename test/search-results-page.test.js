@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { browserCommand } from '../src/browser-launcher.js';
+import { EventEmitter } from 'node:events';
+import { browserCommand, openInBrowser } from '../src/browser-launcher.js';
 import {
   cleanupStaleSearchResultPages,
   createSearchResultsPage,
@@ -110,4 +111,15 @@ test('selects safe native browser launcher commands', () => {
   assert.deepEqual(browserCommand(target, 'win32', 'C:\\Apps\\browser.exe'),
     { command: 'C:\\Apps\\browser.exe', args: [target] });
   assert.throws(() => browserCommand(target, 'linux', 'safari'), /not supported on linux/);
+});
+
+test('detects a macOS browser application that cannot be opened', async () => {
+  const child = new EventEmitter();
+  const launched = openInBrowser('https://example.test', 'Missing Browser', 'darwin', () => child);
+  child.emit('exit', 1);
+  await assert.rejects(launched, (error) => {
+    assert.equal(error.code, 'BROWSER_LAUNCH_FAILED');
+    assert.match(error.message, /macOS open command exited with code 1/);
+    return true;
+  });
 });
