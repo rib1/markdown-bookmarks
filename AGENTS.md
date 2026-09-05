@@ -37,6 +37,7 @@ the CLI.
 - Preserve publication-date source and confidence when extracted.
 - Keep access history separate from saved-page content.
 - Prefer typed relationships such as `references`, `supports`, `alternative`, `follow-up`, and `duplicate`.
+- Store the vault schema version in `.markdown-bookmarks.json`. Migrations must be idempotent, preserve unknown metadata, and update the vault version only after every file succeeds.
 
 ## Development rules
 
