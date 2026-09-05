@@ -179,7 +179,7 @@ The CLI must support:
 init [--path PATH] [--no-skill]
 skill install [--path PATH]
 save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
-find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--browser] [--with BROWSER] [--dry-run]
+find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
 open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]
 ```
 
@@ -187,7 +187,11 @@ All npm examples must include the argument separator:
 `npm run bookmark -- COMMAND`. Without `--`, npm may consume CLI options such
 as `--browser` or `--fuzzy` instead of forwarding them.
 
-`find` returns file path, URL, and full Markdown content. With `--browser`, it
+`find` prints compact, numbered terminal results containing title, short stable
+ID, URL, comma-separated tags, and optional fuzzy-match details. Results use
+the same deterministic ordering as `open --pick`; `--expand` additionally
+prints the vault file path and full Markdown content.
+With `--browser`, it
 creates a static, safely escaped HTML page in the vault's ignored
 `views/.search-results/` directory. Native mode prints its `file://` URL before
 opening it; Docker prints the corresponding host-side `file://` URL.

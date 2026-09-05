@@ -8,6 +8,7 @@ import {
 } from './search-results-page.js';
 import { metadataValue, sortSearchResults } from './search-result-order.js';
 import { CANCELLED_SELECTION, interactiveResult, pickedResult } from './open-selection.js';
+import { readList } from './bookmark-format.js';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -32,9 +33,24 @@ function positionalArgument(valueOptions = []) {
   return undefined;
 }
 
-function printSearchResult(result) {
+function printSearchResult(result, index, expand = false) {
+  const title = metadataValue(result.content, 'title') || '(untitled)';
+  const url = metadataValue(result.content, 'url') || '(missing)';
+  const id = String(metadataValue(result.content, 'id') || '');
+  if (!expand) {
+    const tags = readList(result.content, 'tags');
+    console.log(`${index + 1}. ${title}${id ? ` [${id.slice(0, 8)}]` : ''}`);
+    console.log(`   URL: ${url}`);
+    console.log(`   TAGS: ${tags.join(', ') || '(none)'}`);
+    if (result.matchType) {
+      const fields = result.matchedFields?.length ? ` (${result.matchedFields.join(', ')})` : '';
+      console.log(`   MATCH: ${result.matchType} ${Math.round(result.matchScore * 100)}%${fields}`);
+    }
+    return;
+  }
+  console.log(`RESULT: ${index + 1} — ${title}`);
   console.log(`FILE: ${result.file}`);
-  console.log(`URL: ${metadataValue(result.content, 'url') || '(missing)'}`);
+  console.log(`URL: ${url}`);
   if (result.matchType) {
     const fields = result.matchedFields?.length ? ` (${result.matchedFields.join(', ')})` : '';
     console.log(`MATCH: ${result.matchType} ${Math.round(result.matchScore * 100)}%${fields}`);
@@ -110,7 +126,11 @@ Examples:
   npm run bookmark -- open triper --fuzzy
   npm run bookmark -- open database --dry-run
 
-Open a bookmark by its stable ID:
+Open a bookmark by the short ID shown in find output:
+  npm run bookmark -- find database
+  npm run bookmark -- open d34db33f
+
+Full stable IDs work too:
   npm run bookmark -- open 550e8400-e29b-41d4-a716-446655440000
 
 Search first, then open the third matching link:
@@ -135,17 +155,27 @@ function printHelp() {
   init [--path PATH] [--no-skill]
   skill install [--path PATH]
   save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
-  find QUERY [--saved-within PERIOD] [--saved-since DATE] [--fuzzy] [--browser] [--with BROWSER] [--dry-run]
+  find QUERY [--saved-within PERIOD] [--saved-since DATE] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
   open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]
 
 npm syntax:
   Keep the "--" in "npm run bookmark -- COMMAND". It forwards options such as
-  --browser, --fuzzy, --pick, --with, and --dry-run to the bookmark CLI.
+  --browser, --fuzzy, --expand, --pick, --with, and --dry-run to the bookmark CLI.
+
+Compact find output:
+  1. Night Drive [d34db33f]
+     URL: https://desert-sounds.bandcamp.com/album/night-drive
+     TAGS: bandcamp, music
+
+Use find QUERY --expand to include vault file paths and full Markdown records.
+The displayed ID prefix can be used with open when it uniquely identifies a bookmark.
 
 Common workflows:
   npm run bookmark -- save --url https://example.test/page --shared-by Alice --via Signal
   npm run bookmark -- find database
   npm run bookmark -- open database --pick 3
+  npm run bookmark -- find database --expand
+  npm run bookmark -- open d34db33f
   npm run bookmark -- open database --pick 3 --with firefox
   npm run bookmark -- find triper --fuzzy
   npm run bookmark -- find database --browser --with chrome
@@ -224,7 +254,7 @@ if (command === 'help' || command === '--help' || command === '-h') {
       }
     }
   } else {
-    for (const result of results) printSearchResult(result);
+    sortSearchResults(results).forEach((result, index) => printSearchResult(result, index, args.includes('--expand')));
   }
 } else if (command === 'open') {
   if (args.includes('--help') || args.includes('-h')) {

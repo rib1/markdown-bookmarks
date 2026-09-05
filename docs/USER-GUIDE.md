@@ -261,6 +261,31 @@ and run:
 npm run bookmark -- find database
 ```
 
+Terminal searches use a compact three-line result: numbered title with a short
+stable-ID prefix, URL, and comma-separated tags. This fits several bookmarks in
+a typical terminal and uses the same stable ordering as
+`open QUERY --pick NUMBER`:
+
+```text
+1. Night Drive [d34db33f]
+   URL: https://desert-sounds.bandcamp.com/album/night-drive
+   TAGS: bandcamp, music
+```
+
+To include the vault file path and each bookmark's full Markdown record, add
+`--expand`:
+
+```powershell
+npm run bookmark -- find database --expand
+```
+
+The displayed ID prefix is searchable. Open a bookmark directly when that
+prefix is unique:
+
+```powershell
+npm run bookmark -- open d34db33f
+```
+
 The CLI can also record manually supplied sender information:
 
 ```powershell
@@ -278,8 +303,8 @@ Fuzzy matching normalizes case, punctuation, and Unicode, then compares query
 tokens with bookmark fields using transposition-aware edit distance. Titles,
 IDs, tags, contexts, and site identifiers rank above URLs and Markdown body
 text. Every query token must meet a strict similarity threshold, and very short
-terms are not broadened. Exact matches always rank before fuzzy matches. Text
-results show the score and strongest matching fields.
+terms are not broadened. Exact matches always rank before fuzzy matches. Compact
+terminal results show the score and strongest matching fields.
 
 The same ordering is used when opening one result or generating a browser page:
 

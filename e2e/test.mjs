@@ -84,10 +84,11 @@ try {
   // Verify that the CLI can resolve the saved bookmark for browser opening.
   const opened = await exec('node', ['src/cli.js', 'open', testUrl, '--dry-run'], { cwd: '/e2e', env: { ...process.env, BOOKMARK_VAULT: vault } });
   assert.equal(opened.stdout.trim(), testUrl);
-  // Verify search returns the URL and full Markdown content, not only a filename.
+  // Verify compact search returns the URL and merged tags without flooding the terminal.
   const found = await exec('node', ['src/cli.js', 'find', testUrl], { cwd: '/e2e', env: { ...process.env, BOOKMARK_VAULT: vault } });
   assert.match(found.stdout, new RegExp(`URL: ${testUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-  assert.match(found.stdout, /- "duplicate"/);
+  assert.match(found.stdout, /TAGS: e2e, work, duplicate/);
+  assert.doesNotMatch(found.stdout, /FILE:|^tags:/m);
 
   console.log('testing generated browser search page');
   searchVault = await fs.mkdtemp('/tmp/markdown-bookmarks-search-page-');

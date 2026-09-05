@@ -47,14 +47,20 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   const generalHelp = await run(process.execPath, [cli, 'help']);
   assert.match(generalHelp.stdout, /Markdown Bookmarks commands:/);
   assert.match(generalHelp.stdout, /save --url URL .*--shared-by NAME.*--via CHANNEL/);
-  assert.match(generalHelp.stdout, /find QUERY .*--with BROWSER/);
+  assert.match(generalHelp.stdout, /find QUERY .*--expand.*--with BROWSER/);
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
   assert.match(generalHelp.stdout, /find QUERY .*--fuzzy.*--browser/);
   assert.match(generalHelp.stdout, /Keep the "--" in "npm run bookmark -- COMMAND"/);
-  assert.match(generalHelp.stdout, /--browser, --fuzzy, --pick, --with, and --dry-run/);
+  assert.match(generalHelp.stdout, /--browser, --fuzzy, --expand, --pick, --with, and --dry-run/);
+  assert.match(generalHelp.stdout, /Compact find output:\n\s+1\. Night Drive \[d34db33f\]/);
+  assert.match(generalHelp.stdout, /TAGS: bandcamp, music/);
+  assert.match(generalHelp.stdout, /find QUERY --expand to include vault file paths and full Markdown records/);
+  assert.match(generalHelp.stdout, /displayed ID prefix can be used with open/);
+  assert.match(generalHelp.stdout, /open d34db33f/);
   assert.match(generalHelp.stdout, /Common workflows:/);
   assert.match(generalHelp.stdout, /save --url https:\/\/example\.test\/page --shared-by Alice --via Signal/);
   assert.match(generalHelp.stdout, /find database\n\s+npm run bookmark -- open database --pick 3/);
+  assert.match(generalHelp.stdout, /find database --expand/);
   assert.match(generalHelp.stdout, /open database --pick 3 --with firefox/);
   assert.match(generalHelp.stdout, /find database --browser --with chrome/);
 
@@ -73,7 +79,9 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /chrome, edge, firefox, brave/);
   assert.match(openHelp.stdout, /safari\s+macOS only/);
   assert.match(openHelp.stdout,
-    /Open a bookmark by its stable ID:\n\s+npm run bookmark -- open 550e8400-e29b-41d4-a716-446655440000/);
+    /Open a bookmark by the short ID shown in find output:\n\s+npm run bookmark -- find database\n\s+npm run bookmark -- open d34db33f/);
+  assert.match(openHelp.stdout,
+    /Full stable IDs work too:\n\s+npm run bookmark -- open 550e8400-e29b-41d4-a716-446655440000/);
   assert.match(openHelp.stdout, /find database\n\s+npm run bookmark -- open database --pick 3/);
   assert.match(openHelp.stdout, /find database --browser --with firefox/);
   assert.match(openHelp.stdout, /open triper --fuzzy/);
@@ -116,9 +124,16 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   assert.match(savedContent, /"channel":"Signal"/);
 
   const found = await run(process.execPath, [cli, 'find', 'amiga'], { env });
+  assert.match(found.stdout, new RegExp(`^1\\. CLI Amiga \\[${savedId.slice(0, 8)}\\]$`, 'm'));
   assert.match(found.stdout, /URL: https:\/\/example.test\/cli/);
-  assert.match(found.stdout, /- "amiga"/);
-  assert.match(found.stdout, /title: "CLI Amiga"/);
+  assert.match(found.stdout, /^ {3}TAGS: amiga, test$/m);
+  assert.doesNotMatch(found.stdout, /FILE:/);
+  assert.doesNotMatch(found.stdout, /^title:|^tags:|^## Summary$/m);
+  const expanded = await run(process.execPath, [cli, 'find', 'amiga', '--expand'], { env });
+  assert.match(expanded.stdout, /^RESULT: 1 — CLI Amiga$/m);
+  assert.match(expanded.stdout, /- "amiga"/);
+  assert.match(expanded.stdout, /title: "CLI Amiga"/);
+  assert.match(expanded.stdout, /^## Summary$/m);
   const foundBySender = await run(process.execPath, [cli, 'find', 'Alice'], { env });
   assert.match(foundBySender.stdout, /URL: https:\/\/example.test\/cli/);
 
@@ -126,6 +141,8 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   assert.equal(opened.stdout.trim(), 'https://example.test/cli');
   const openedById = await run(process.execPath, [cli, 'open', savedId, '--dry-run'], { env });
   assert.equal(openedById.stdout.trim(), 'https://example.test/cli');
+  const openedByShortId = await run(process.execPath, [cli, 'open', savedId.slice(0, 8), '--dry-run'], { env });
+  assert.equal(openedByShortId.stdout.trim(), 'https://example.test/cli');
 
   await run(process.execPath, [cli, 'save', '--url', 'https://example.test/cli-second',
     '--title', 'Second Amiga', '--tags', 'amiga,test'], { env });
@@ -135,7 +152,7 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   const fuzzyFound = await run(process.execPath, [cli, 'find', 'triper', '--fuzzy'], { env });
   assert.match(fuzzyFound.stdout, /URL: https:\/\/example\.test\/tripper/);
   assert.match(fuzzyFound.stdout, /MATCH: fuzzy \d+% \(title\)/);
-  assert.match(fuzzyFound.stdout, /title: "Tripper Travel Planning"/);
+  assert.match(fuzzyFound.stdout, /^1\. Tripper Travel Planning \[[\da-f]{8}\]$/m);
   const fuzzyOpened = await run(process.execPath,
     [cli, 'open', 'triper', '--fuzzy', '--dry-run'], { env });
   assert.equal(fuzzyOpened.stdout.trim(), 'https://example.test/tripper');
