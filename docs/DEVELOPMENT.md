@@ -59,7 +59,8 @@ includes `url`, `canonical_url`, `title`, `type`, `site`, `contexts`, `areas`,
 `projects`, `events`, `tags`, `status`, `priority`, `author`, `published_at`,
 `published_at_source`, `published_at_confidence`, `saved_at`,
 `first_saved_at`, `last_saved_at`, `save_count`, `save_history`,
-`share_history`, `capture_history`, `schema_version`, `summary`, and `related`.
+`share_history`, `capture_history`, site-specific source IDs such as `video_id`
+and `imgur_id`, `schema_version`, `summary`, and `related`.
 
 Keep these concepts distinct:
 
@@ -154,6 +155,8 @@ Site plugins are URL-driven, deterministic, and independently testable.
   `work` context when no context is supplied.
 - Bandcamp: add site, album/track type, artist handle from a non-reserved
   Bandcamp subdomain when author is absent, and the `bandcamp` tag.
+- Imgur: add site, image/album/gallery type, Imgur resource ID, and the `imgur`
+  tag for `imgur.com` and its subdomains.
 
 Keep each plugin in its own `src/site-plugins/<name>.js` module and register it
 in `src/site-plugins/index.js`. Test new records, duplicate saves, and legacy
@@ -257,7 +260,7 @@ pull request. The `Credential scan` workflow runs Gitleaks on the same events.
 
 Tests must cover vault initialization, skill installation, CLI commands and
 path resolution, save/find/open behavior, temporary search-page safety and
-cleanup, duplicate merging, time filters, GitHub/YouTube/Mural/Bandcamp plugins, legacy
+cleanup, duplicate merging, time filters, GitHub/YouTube/Mural/Bandcamp/Imgur plugins, legacy
 enrichment, Chrome capture, and Markdown content. E2E tests must use ignored
 isolated test data, never the private vault.
 

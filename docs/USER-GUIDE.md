@@ -208,6 +208,8 @@ context.
 Bandcamp bookmarks receive the `bandcamp` tag and are classified as albums or
 tracks when the URL identifies that page type. The artist subdomain is used as
 the author only when the page did not provide an author.
+Imgur bookmarks receive the `imgur` tag, their image/album/gallery type, and an
+`imgur_id` when the URL contains a valid resource ID.
 
 ## Command help
 

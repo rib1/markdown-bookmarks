@@ -77,6 +77,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /--with BROWSER/);
   assert.match(openHelp.stdout, /--dry-run/);
   assert.match(openHelp.stdout, /chrome, edge, firefox, brave/);
+  assert.match(openHelp.stdout, /open database --with chrome/);
   assert.match(openHelp.stdout, /safari\s+macOS only/);
   assert.match(openHelp.stdout,
     /Open a bookmark by the short ID shown in find output:\n\s+npm run bookmark -- find database\n\s+npm run bookmark -- open d34db33f/);

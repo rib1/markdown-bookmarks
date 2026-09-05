@@ -61,6 +61,7 @@ frontmatter includes:
 - `schema_version`, stable `id`, `url`, `canonical_url`, `title`, and `type`
 - `contexts` and `tags` for classification
 - optional site metadata such as `site`, `repository`, `author`, or source IDs
+  such as `video_id` and `imgur_id`
 - `published_at`, `published_at_source`, and `published_at_confidence` when a
   publication date was extracted
 - `saved_at`, `first_saved_at`, `last_saved_at`, `save_count`, and

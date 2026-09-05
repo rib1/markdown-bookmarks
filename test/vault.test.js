@@ -147,6 +147,7 @@ test('installs and refreshes vault AGENTS.md when migrations are checked', async
   assert.match(template, /How to search/);
   assert.match(template, /share_history/);
   assert.match(template, /capture_history/);
+  assert.match(template, /imgur_id/);
   assert.match(template, /Missing sender data is normal/);
 
   await fs.writeFile(target, 'stale vault instructions\n', 'utf8');
@@ -433,6 +434,43 @@ test('backfills Bandcamp metadata on duplicate save', async () => {
   assert.match(content, /site: "bandcamp"/);
   assert.match(content, /type: "album"/);
   assert.match(content, /author: "example-artist"/);
+});
+
+test('applies Imgur image, album, and gallery metadata', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-imgur-'));
+  const image = await saveBookmark({
+    url: 'https://i.imgur.com/AbC123.jpg', title: 'Reference image', tags: ['reference']
+  }, root);
+  const album = await saveBookmark({ url: 'https://imgur.com/a/Album42', title: 'Photo album' }, root);
+  const gallery = await saveBookmark({ url: 'https://www.imgur.com/gallery/Gallery7', title: 'Image gallery' }, root);
+  const imageContent = await fs.readFile(image.file, 'utf8');
+  const albumContent = await fs.readFile(album.file, 'utf8');
+  const galleryContent = await fs.readFile(gallery.file, 'utf8');
+  assert.match(imageContent, /site: imgur/);
+  assert.match(imageContent, /type: image/);
+  assert.match(imageContent, /imgur_id: "AbC123"/);
+  assert.match(imageContent, /- "reference"/);
+  assert.match(imageContent, /- "imgur"/);
+  assert.match(albumContent, /type: album/);
+  assert.match(albumContent, /imgur_id: "Album42"/);
+  assert.match(galleryContent, /type: gallery/);
+  assert.match(galleryContent, /imgur_id: "Gallery7"/);
+  const fuzzy = await findBookmarks('AbC132', root, { fuzzy: true });
+  assert.equal(fuzzy.length, 1);
+  assert.deepEqual(fuzzy[0].matchedFields, ['imgur_id']);
+});
+
+test('backfills Imgur metadata on duplicate save', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-imgur-legacy-'));
+  const saved = await saveBookmark({ url: 'https://imgur.com/a/Archive8', title: 'Archive' }, root);
+  let content = await fs.readFile(saved.file, 'utf8');
+  content = content.replace(/^type:.*\n|^site:.*\n|^imgur_id:.*\n/gm, '');
+  await fs.writeFile(saved.file, content, 'utf8');
+  await saveBookmark({ url: 'https://imgur.com/a/Archive8', title: 'Archive' }, root);
+  content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /site: "imgur"/);
+  assert.match(content, /type: "album"/);
+  assert.match(content, /imgur_id: "Archive8"/);
 });
 
 test('backfills site metadata when a legacy bookmark is saved again', async () => {

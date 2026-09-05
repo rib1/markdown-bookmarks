@@ -9,6 +9,7 @@ const scalarFields = [
   ['project_key', 0.95],
   ['repository', 0.95],
   ['video_id', 0.95],
+  ['imgur_id', 0.95],
   ['space_key', 0.95],
   ['page_id', 0.95],
   ['author', 0.85],

@@ -115,7 +115,7 @@ export async function saveBookmark(input, root = vaultRoot()) {
       const mergedCaptures = appendCaptureEvent(readList(content, 'capture_history'), captureEvent);
       if (mergedCaptures.added) content = replaceList(content, 'capture_history', mergedCaptures.history);
     }
-    for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'space_key', 'page_id', 'issue_key', 'project_key', 'published_at', 'published_at_source', 'published_at_confidence']) {
+    for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'imgur_id', 'space_key', 'page_id', 'issue_key', 'project_key', 'published_at', 'published_at_source', 'published_at_confidence']) {
       if (input[field]) content = replaceScalar(content, field, input[field]);
     }
     content = replaceScalar(content, 'last_saved_at', now);
@@ -145,6 +145,7 @@ export async function saveBookmark(input, root = vaultRoot()) {
     input.site ? `site: ${input.site}` : '',
     input.repository ? `repository: ${JSON.stringify(input.repository)}` : '',
     input.video_id ? `video_id: ${JSON.stringify(input.video_id)}` : '',
+    input.imgur_id ? `imgur_id: ${JSON.stringify(input.imgur_id)}` : '',
     input.space_key ? `space_key: ${JSON.stringify(input.space_key)}` : '',
     input.page_id ? `page_id: ${JSON.stringify(input.page_id)}` : '',
     input.issue_key ? `issue_key: ${JSON.stringify(input.issue_key)}` : '',

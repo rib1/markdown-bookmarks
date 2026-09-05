@@ -122,7 +122,7 @@ Examples:
   npm run bookmark -- open database
   npm run bookmark -- open database --pick 2
   npm run bookmark -- open database --with firefox
-  npm run bookmark -- open database --with "Google Chrome"
+  npm run bookmark -- open database --with chrome
   npm run bookmark -- open triper --fuzzy
   npm run bookmark -- open database --dry-run
 
