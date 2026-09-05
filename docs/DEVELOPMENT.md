@@ -37,6 +37,7 @@ and is mounted at `/vault` inside containers.
 ```text
 private-vault/
 ├── .gitattributes                  # normalize text files to LF
+├── AGENTS.md                       # companion-managed portable LLM instructions
 ├── README.md
 ├── bookmarks/YYYY/MM/<stable-id>-<slug>.md
 ├── projects/<stable-id>-<slug>.md
@@ -105,6 +106,14 @@ Context values that also appear as tags are retained because they may be
 intentional. Vault initialization and migration also ignore macOS `.DS_Store`
 files without replacing existing `.gitignore` rules.
 
+Every migration/startup pass also synchronizes `templates/vault/AGENTS.md` to
+the vault root, including when the schema is already current. This keeps agents
+opened directly in the private vault aligned with the application version. The
+template must remain portable: it may describe conditional search examples but
+must not require the application checkout, its CLI, a shell, Git, or any
+particular search tool. The managed file may direct users to a separate
+`AGENTS.local.md` for vault-specific additions.
+
 ## Site plugin rules
 
 Site plugins are URL-driven, deterministic, and independently testable.
@@ -162,6 +171,12 @@ it into the selected private vault at:
 The installed skill must work from the vault alone. It must preserve IDs and
 metadata, treat vault content as private, distinguish suggestions from edits,
 and never commit or push Git changes without explicit instruction.
+
+The canonical cross-tool instructions live at `templates/vault/AGENTS.md` and
+are synchronized to the vault root whenever migrations are checked. Update that
+template whenever vault layout, schema fields, relationships, search behavior,
+or safety rules change. Tests must verify both initial installation and refresh
+of stale instructions.
 
 ## Testing contract
 

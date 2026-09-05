@@ -26,7 +26,8 @@ relate, review, or update their Markdown bookmark vault.
 
 ## Safe workflow
 
-1. Identify the vault root and inspect its documented layout.
+1. Identify the vault root and read its `AGENTS.md`, optional
+   `AGENTS.local.md`, and documented layout.
 2. Search Markdown files before proposing new bookmarks or entities.
 3. Read relevant frontmatter and body text; do not rely only on filenames.
 4. Make the smallest edit that satisfies the request.
@@ -51,6 +52,6 @@ relate, review, or update their Markdown bookmark vault.
 - Produce review lists such as unread work links or recently saved project
   references.
 
-For canonical frontmatter fields and vault layout, read the vault’s `README.md`
-and inspect existing bookmark files. Do not require access to the application
-repository to use this skill.
+Treat the vault-root `AGENTS.md` as the canonical, companion-maintained
+instructions for current frontmatter, layout, and portable search guidance.
+Do not require access to the application repository to use this skill.

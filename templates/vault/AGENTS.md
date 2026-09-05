@@ -1,0 +1,127 @@
+# Instructions for LLM agents in this bookmark vault
+
+This directory is a private, local-first bookmark vault. It is separate from
+the Markdown Bookmarks application source repository and must remain usable on
+its own.
+
+This file is managed by the Markdown Bookmarks companion and may be refreshed
+when the companion starts. Put additional user-specific instructions in
+`AGENTS.local.md`; read that file too when it exists.
+
+## Work without tool assumptions
+
+- Do not assume the application repository, companion CLI, a database, network
+  access, Git, a shell, or any particular search command is available.
+- Use the file-reading and search capabilities available in the current
+  environment. Discover capabilities before relying on them.
+- If recursive search is unavailable, traverse the documented directories and
+  inspect Markdown files directly.
+- Never require generated indexes. Markdown files are the source of truth.
+
+## Privacy and safety
+
+- Treat every URL, title, note, project, event, relationship, and asset as
+  private personal data.
+- Do not send vault content to external services or fetch bookmarked URLs unless
+  the user explicitly requests it.
+- Do not reveal private content in logs or summaries beyond what the user needs.
+- Do not commit, push, pull, change remotes, or otherwise use Git unless the user
+  explicitly asks.
+- Do not delete, merge, archive, rename, or bulk-rewrite records without explicit
+  scope and a preview of the intended changes.
+
+## Vault structure
+
+Paths are relative to this vault root:
+
+- `bookmarks/YYYY/MM/` contains bookmark Markdown files. Year/month directories
+  are storage organization based on save time, not semantic categories.
+- `projects/` contains project records with stable IDs.
+- `events/` contains time-bound event records with stable IDs.
+- `assets/` may contain content associated with bookmark IDs.
+- `views/` may contain generated, disposable views. Never treat them as the
+  source of truth.
+- `.markdown-bookmarks.json` is the companion-managed vault schema checkpoint.
+  Do not edit it manually.
+- `.codex/skills/` may contain optional tool-specific guidance. Do not require it.
+
+Directories may be empty or absent in an older vault. Do not infer that a type
+of information is unavailable until the relevant Markdown files have been
+searched.
+
+## Bookmark records
+
+Bookmark files use YAML frontmatter followed by ordinary Markdown. Current core
+frontmatter includes:
+
+- `schema_version`, stable `id`, `url`, `canonical_url`, `title`, and `type`
+- `contexts` and `tags` for classification
+- optional site metadata such as `site`, `repository`, `author`, or source IDs
+- `published_at`, `published_at_source`, and `published_at_confidence` when a
+  publication date was extracted
+- `saved_at`, `first_saved_at`, `last_saved_at`, `save_count`, and
+  `save_history` for save activity
+- optional typed relationships such as `references`, `supports`, `alternative`,
+  `follow-up`, and `duplicate`
+
+Records may also use `areas`, `projects`, and `events` for classification and
+many-to-many relationships. Inspect existing project and event records before
+assuming a detailed schema for them.
+
+Preserve unknown metadata. Keep access history separate from saved-page content.
+Use stable IDs for relationships and support many-to-many links. Keep these
+concepts distinct:
+
+- contexts: life setting, such as work, personal, hobby, or travel
+- areas: ongoing responsibilities
+- projects: temporary goals
+- events: time-bound occasions
+- tags: subject labels
+
+Do not create semantic category directories.
+
+## How to search
+
+1. Determine the requested scope: bookmarks, projects, events, or all records.
+2. Search filenames only as a quick candidate filter; confirm matches by reading
+   frontmatter and Markdown bodies.
+3. Search case-insensitively across relevant `*.md` files for title, URL,
+   summary text, and metadata values.
+4. For a metadata match, verify that the value belongs to the intended YAML
+   field or list. A text hit alone does not prove a tag, context, or relation.
+5. For recent items, parse `saved_at` or `last_saved_at`; do not rely only on the
+   year/month path.
+6. For duplicates, compare `canonical_url` first. If it is absent, normalize
+   `url` by ignoring fragments and harmless trailing-slash differences. Never
+   merge automatically.
+7. For project, event, or relationship searches, follow stable IDs in both
+   directions and report broken references separately.
+8. Report concise results with relative file paths, titles, and why each record
+   matched. Distinguish confirmed facts from suggestions.
+
+If a shell is available, choose an installed search tool rather than assuming
+one. Examples, in preferred order, are:
+
+```text
+rg -n -i --glob '*.md' 'search text' bookmarks projects events
+grep -Rin --include='*.md' 'search text' bookmarks projects events
+Get-ChildItem bookmarks,projects,events -Recurse -Filter *.md | Select-String -Pattern 'search text'
+```
+
+These are optional examples, not requirements. A built-in workspace search or
+direct recursive file inspection is equally valid.
+
+## Safe editing workflow
+
+1. Read this file, optional `AGENTS.local.md`, the vault `README.md`, and relevant
+   existing records.
+2. Search for an existing record before creating one.
+3. Make the smallest requested change and preserve stable IDs, URLs, timestamps,
+   notes, unknown fields, valid YAML, and Markdown.
+4. Use metadata for classification and stable IDs for relationships.
+5. Do not invent publication dates, contexts, projects, events, or relationships.
+   Mark suggestions as suggestions unless the user confirms them.
+6. Re-read changed files and check for malformed frontmatter, duplicate IDs,
+   broken references, and accidental values in the wrong list.
+7. Summarize changed files and material metadata changes without exposing
+   unrelated private content.

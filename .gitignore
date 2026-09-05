@@ -1,5 +1,5 @@
 # Personal vault and generated data must stay outside the public app repo.
-vault/
+/vault/
 test-data/
 e2e/test-results/
 e2e/playwright-report/

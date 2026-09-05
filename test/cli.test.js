@@ -19,6 +19,7 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
 
   const initialized = await run(process.execPath, [cli, 'init', '--path', root], { env });
   assert.match(initialized.stdout, /Vault ready/);
+  assert.match(await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8'), /How to search/);
 
   const saved = await run(process.execPath, [cli, 'save', '--url', 'https://example.test/cli', '--title', 'CLI Amiga', '--tags', 'amiga,test'], { env });
   const savedResult = JSON.parse(saved.stdout);

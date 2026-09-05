@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { readScalar, replaceScalar } from '../bookmark-format.js';
+import { syncVaultAgentInstructions } from '../vault-agent-instructions.js';
 import * as schemaVersion1 from './001-bookmark-schema-v1.js';
 
 export const BOOKMARK_SCHEMA_VERSION = 1;
@@ -114,10 +115,14 @@ export async function migrateVault(root) {
     migrated: 0,
     repairedTags: 0,
     ambiguousContextTags: 0,
+    agentInstructions: undefined,
     gitignoreUpdated,
     skipped: fromSchemaVersion === BOOKMARK_SCHEMA_VERSION
   };
-  if (result.skipped) return result;
+  if (result.skipped) {
+    result.agentInstructions = (await syncVaultAgentInstructions(root)).status;
+    return result;
+  }
 
   const files = await bookmarkFiles(root);
   result.scanned = files.length;
@@ -132,6 +137,7 @@ export async function migrateVault(root) {
     await writeAtomic(file, migration.content);
     result.migrated++;
   }
+  result.agentInstructions = (await syncVaultAgentInstructions(root)).status;
   await writeVaultSchemaVersion(root, BOOKMARK_SCHEMA_VERSION);
   return result;
 }
