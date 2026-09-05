@@ -53,6 +53,9 @@ function printOpenHelp() {
 
 Find a bookmark and open its HTTP/HTTPS URL.
 
+When using npm, keep the "--" after "bookmark" so npm forwards every option
+below to this CLI.
+
 Options:
   --pick NUMBER     Skip the menu and directly open a numbered search result.
   --with BROWSER   Use a browser alias, application name, executable, or executable path.
@@ -102,6 +105,10 @@ function printHelp() {
   save --url URL [--title TITLE] [--tags tag1,tag2]
   find QUERY [--saved-within PERIOD] [--saved-since DATE] [--browser] [--with BROWSER] [--dry-run]
   open QUERY [--pick NUMBER] [--with BROWSER] [--dry-run]
+
+npm syntax:
+  Keep the "--" in "npm run bookmark -- COMMAND". It forwards options such as
+  --browser, --pick, --with, and --dry-run to the bookmark CLI.
 
 Common workflows:
   npm run bookmark -- find database
@@ -164,7 +171,9 @@ if (command === 'help' || command === '--help' || command === '-h') {
   }
   if (selectedBrowser && !args.includes('--browser')) throw new Error('--with requires find --browser');
   const results = await findBookmarks(query, undefined, { savedWithin: option('--saved-within'), savedSince: option('--saved-since') });
-  if (args.includes('--browser')) {
+  if (!results.length) {
+    console.log(`No bookmarks found for: ${query}`);
+  } else if (args.includes('--browser')) {
     const page = await createSearchResultsPage(query, results);
     const hostVaultPath = process.env.BOOKMARK_RESULTS_HOST_VAULT;
     const pageUrl = hostVaultPath ? hostSearchResultsFileUrl(page.token, hostVaultPath) : page.fileUrl;

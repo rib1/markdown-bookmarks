@@ -26,6 +26,8 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /Markdown Bookmarks commands:/);
   assert.match(generalHelp.stdout, /find QUERY .*--with BROWSER/);
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
+  assert.match(generalHelp.stdout, /Keep the "--" in "npm run bookmark -- COMMAND"/);
+  assert.match(generalHelp.stdout, /--browser, --pick, --with, and --dry-run/);
   assert.match(generalHelp.stdout, /Common workflows:/);
   assert.match(generalHelp.stdout, /find database\n\s+npm run bookmark -- open database --pick 3/);
   assert.match(generalHelp.stdout, /open database --pick 3 --with firefox/);
@@ -33,6 +35,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
 
   const openHelp = await run(process.execPath, [cli, 'open', '--help']);
   assert.match(openHelp.stdout, /--pick NUMBER/);
+  assert.match(openHelp.stdout, /keep the "--" after "bookmark"/i);
   assert.match(openHelp.stdout, /Without --pick, an interactive terminal displays a numbered menu/);
   assert.match(openHelp.stdout, /With --pick NUMBER, that menu is skipped/);
   assert.match(openHelp.stdout, /--pick=NUMBER is also accepted/);
@@ -59,6 +62,11 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   const initialized = await run(process.execPath, [cli, 'init', '--path', root], { env });
   assert.match(initialized.stdout, /Vault ready/);
   assert.match(await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8'), /How to search/);
+
+  const emptyBrowserSearch = await run(process.execPath,
+    [cli, 'find', 'triper', '--browser'], { env });
+  assert.equal(emptyBrowserSearch.stdout.trim(), 'No bookmarks found for: triper');
+  await assert.rejects(() => fs.access(path.join(root, 'views', '.search-results')), { code: 'ENOENT' });
 
   const saved = await run(process.execPath, [cli, 'save', '--url', 'https://example.test/cli', '--title', 'CLI Amiga', '--tags', 'amiga,test'], { env });
   const savedResult = JSON.parse(saved.stdout);

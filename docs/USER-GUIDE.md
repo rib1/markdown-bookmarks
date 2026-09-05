@@ -193,6 +193,15 @@ full command list with:
 npm run bookmark -- help
 ```
 
+The `--` after `bookmark` is required for npm commands. It tells npm to forward
+following options such as `--browser`, `--pick`, `--with`, and `--dry-run` to
+the bookmark CLI. Without it, npm may consume an option; for example,
+`npm run bookmark find amiga --browser` performs a plain text search. Use:
+
+```powershell
+npm run bookmark -- find amiga --browser
+```
+
 This lists initialization, saving, searching, browser-page generation, and
 link-opening commands. Its examples show how to open by stable bookmark ID,
 search first and open a numbered result, choose another browser, or open all
@@ -247,6 +256,8 @@ under the private vault's Git-ignored `views/.search-results/` directory. The
 page contains private result metadata, loads no external assets, and is never a
 source record. Server startup deletes generated pages older than 24 hours. Add
 `--dry-run` to generate and print the page URL without opening it.
+If no bookmarks match, the command prints `No bookmarks found for: QUERY` and
+does not create a page or launch a browser.
 
 Open a matching bookmark in the default browser with the native npm workflow:
 

@@ -151,6 +151,10 @@ find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--br
 open QUERY [--pick NUMBER] [--with BROWSER] [--dry-run]
 ```
 
+All npm examples must include the argument separator:
+`npm run bookmark -- COMMAND`. Without `--`, npm may consume CLI options such
+as `--browser` instead of forwarding them.
+
 `find` returns file path, URL, and full Markdown content. With `--browser`, it
 creates a static, safely escaped HTML page in the vault's ignored
 `views/.search-results/` directory. Native mode prints its `file://` URL before
