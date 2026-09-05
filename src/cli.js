@@ -7,6 +7,7 @@ import {
   hostSearchResultsFileUrl
 } from './search-results-page.js';
 import { metadataValue, sortSearchResults } from './search-result-order.js';
+import { CANCELLED_SELECTION, interactiveResult, pickedResult } from './open-selection.js';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -92,7 +93,8 @@ Browser aliases:
 
 Multiple matches:
   Without --pick, an interactive terminal displays a numbered menu and asks
-  you to choose. With --pick NUMBER, that menu is skipped and the numbered
+  you to choose. Press Enter without a number to cancel and open nothing.
+  With --pick NUMBER, that menu is skipped and the numbered
   match for the current query opens directly. --pick=NUMBER is also accepted.
   With --fuzzy, numbering follows match score; exact matches rank first.
 
@@ -151,14 +153,6 @@ Common workflows:
 Run "npm run bookmark -- open --help" for launch options and browser details.`);
 }
 
-function pickedResult(results, value) {
-  const pick = Number(value);
-  if (!Number.isInteger(pick) || pick < 1 || pick > results.length) {
-    throw new Error(`--pick must be a number from 1 to ${results.length}`);
-  }
-  return results[pick - 1];
-}
-
 async function chooseOpenResult(results, requestedPick) {
   if (!results.length) return undefined;
   const sorted = sortSearchResults(results);
@@ -171,7 +165,7 @@ async function chooseOpenResult(results, requestedPick) {
   }
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    return pickedResult(sorted, await prompt.question(`Choose a bookmark [1-${sorted.length}]: `));
+    return interactiveResult(sorted, await prompt.question(`Choose a bookmark [1-${sorted.length}, Enter to cancel]: `));
   } finally {
     prompt.close();
   }
@@ -244,16 +238,20 @@ if (command === 'help' || command === '--help' || command === '-h') {
       throw new Error('--with requires a browser name or executable');
     }
     if (!query) throw new Error('Usage: npm run bookmark -- open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]');
-    const result = await chooseOpenResult(await findBookmarks(query, undefined, { fuzzy }), option('--pick'));
-    if (!result) throw new Error(`No bookmark found for: ${query}`);
-    const url = result.content.match(/^url:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
-    if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Bookmark has no safe HTTP URL: ${result.file}`);
-    if (dryRun) {
-      console.log(url);
-    } else if (process.env.BOOKMARK_RESULTS_HOST_VAULT) {
-      console.log(`Open bookmark${selectedBrowser ? ` in ${selectedBrowser}` : ''}: ${url}`);
+    const selection = await chooseOpenResult(await findBookmarks(query, undefined, { fuzzy }), option('--pick'));
+    if (selection === CANCELLED_SELECTION) {
+      console.log('Cancelled.');
     } else {
-      await launchBrowserOrExplain(url, selectedBrowser);
+      if (!selection) throw new Error(`No bookmark found for: ${query}`);
+      const url = selection.content.match(/^url:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
+      if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Bookmark has no safe HTTP URL: ${selection.file}`);
+      if (dryRun) {
+        console.log(url);
+      } else if (process.env.BOOKMARK_RESULTS_HOST_VAULT) {
+        console.log(`Open bookmark${selectedBrowser ? ` in ${selectedBrowser}` : ''}: ${url}`);
+      } else {
+        await launchBrowserOrExplain(url, selectedBrowser);
+      }
     }
   }
 } else {

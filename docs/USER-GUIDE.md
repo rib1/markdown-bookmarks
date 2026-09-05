@@ -146,10 +146,11 @@ starts listening.
 
 The current prototype is not yet packaged for a browser store.
 
-The add-on and companion verify API compatibility before saving. After pulling
-application changes, restart the companion and reload the unpacked add-on. If
-the add-on is too old, saving is blocked and the popup tells you to reload or
-update it; the bookmark is not partially saved.
+The add-on and companion verify API compatibility only after you click Save, so
+opening the popup does not wait for the companion. After pulling application
+changes, restart the companion and reload the unpacked add-on. When versions
+differ, supported fields are saved and the popup lists omitted fields with an
+instruction to update the older component.
 
 ## Reload the extension after changes
 
@@ -331,7 +332,8 @@ command returns a nonzero status so scripts can detect that launching failed.
 
 If several bookmarks match, `open` shows a numbered list and asks which one to
 open. Enter a short number such as `2`; there is no need to type the bookmark
-ID. For scripts or other non-interactive use, select the same numbered result
+ID. Press Enter without selecting a number to cancel and open nothing. For
+scripts or other non-interactive use, select the same numbered result
 with `open QUERY --pick 2`. Supplying `--pick` skips the menu and opens that
 result directly; `--pick=2` is equivalent. Results are sorted by title so the
 numbering is stable. Use `open QUERY --dry-run` to print the selected URL
@@ -385,4 +387,5 @@ the `extension` directory itself.
 
 For **Browser add-on is out of date**, restart the updated companion, open
 `chrome://extensions`, and click **Reload** on Markdown Bookmarks. The companion
-blocks incompatible requests before writing, so retry the save after reloading.
+saves fields provided by the older add-on and displays an update warning. Reload
+before subsequent saves to capture all available metadata.

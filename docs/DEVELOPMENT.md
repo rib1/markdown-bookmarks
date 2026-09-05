@@ -121,17 +121,17 @@ no longer interpret the format.
 ## Browser API compatibility
 
 Browser add-on and companion compatibility uses an API protocol independent of
-the vault schema. `GET /capabilities` advertises protocol bounds, supported
-features, accepted bookmark input fields, and deprecated aliases. Every browser
-save uses a versioned envelope and the response confirms each processed input
-field.
+the vault schema. The check runs when the user saves, not when the popup opens.
+`GET /capabilities` advertises protocol bounds, supported features, accepted
+bookmark input fields, and deprecated aliases. Every current browser save uses
+a versioned envelope and the response confirms each processed input field.
 
-- Reject legacy add-ons before writing when their payload could lose fields.
+- Save fields supported by both sides and return warnings listing omitted fields.
 - Tell the user to reload or update the browser add-on when its protocol is too old.
 - Tell the user to update the companion when the add-on is newer.
-- Reject unknown fields instead of silently discarding them.
+- Treat invalid required fields as errors, but omit unknown optional fields with a warning.
 - Keep renamed fields as explicit aliases for a transition period and return a warning.
-- Never partially write an incompatible or invalid request.
+- Legacy add-ons receive a visible saved-with-warning response through their existing error display.
 
 Every migration/startup pass also synchronizes `templates/vault/AGENTS.md` to
 the vault root, including when the schema is already current. This keeps agents

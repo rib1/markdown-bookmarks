@@ -36,12 +36,19 @@ const server = http.createServer(async (request, response) => {
     try {
       const parsed = parseBrowserSaveRequest(JSON.parse(raw));
       const result = await saveBookmark({ ...parsed.bookmark, capture_client: parsed.client }, vault);
-      send(response, 201, {
-        ok: true,
+      const body = {
+        ok: !parsed.legacyClient,
+        saved: true,
         result,
         processed_fields: parsed.processedFields,
+        ignored_fields: parsed.ignoredFields,
         warnings: parsed.warnings
-      });
+      };
+      if (parsed.legacyClient) {
+        body.code = 'browser_addon_update_required';
+        body.error = parsed.warnings[0].message;
+      }
+      send(response, 201, body);
     } catch (error) {
       const status = error instanceof ApiContractError ? error.status : 400;
       send(response, status, { ok: false, code: error.code || 'save_failed', error: error.message });

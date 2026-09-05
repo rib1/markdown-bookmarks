@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { CANCELLED_SELECTION, interactiveResult } from '../src/open-selection.js';
 
 const run = promisify(execFile);
 const cli = path.resolve('src', 'cli.js');
@@ -19,6 +20,27 @@ async function readEventually(file) {
     }
   }
   throw new Error(`Timed out waiting for ${file}`);
+}
+
+function runInteractiveCli(args, { env, input = '\n' }) {
+  const script = `
+Object.defineProperty(process.stdin, 'isTTY', { value: true });
+Object.defineProperty(process.stdout, 'isTTY', { value: true });
+process.argv = [process.execPath, ${JSON.stringify(cli)}, ...${JSON.stringify(args)}];
+await import(${JSON.stringify(pathToFileURL(cli).href)});
+`;
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['--input-type=module', '--eval', script], { env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code, stdout, stderr }));
+    child.stdin.end(input);
+  });
 }
 
 test('CLI help lists commands, launch options, browser choices, and linked workflows', async () => {
@@ -41,6 +63,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /--fuzzy\s+Use typo-tolerant ranked matching/);
   assert.match(openHelp.stdout, /keep the "--" after "bookmark"/i);
   assert.match(openHelp.stdout, /Without --pick, an interactive terminal displays a numbered menu/);
+  assert.match(openHelp.stdout, /Press Enter without a number to cancel and open nothing/);
   assert.match(openHelp.stdout, /With --pick NUMBER, that menu is skipped/);
   assert.match(openHelp.stdout, /--pick=NUMBER is also accepted/);
   assert.match(openHelp.stdout, /If the selected browser is missing or cannot start/);
@@ -55,6 +78,13 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /find database --browser --with firefox/);
   assert.match(openHelp.stdout, /open triper --fuzzy/);
   assert.match(openHelp.stdout, /Docker cannot launch a host application/);
+});
+
+test('empty interactive link selection cancels without choosing a bookmark', () => {
+  const results = [{ file: 'one.md' }, { file: 'two.md' }];
+  assert.equal(interactiveResult(results, ''), CANCELLED_SELECTION);
+  assert.equal(interactiveResult(results, '   '), CANCELLED_SELECTION);
+  assert.equal(interactiveResult(results, '2'), results[1]);
 });
 
 test('CLI commands initialize, save, find, install the vault skill, and dry-run open', async () => {
@@ -114,6 +144,11 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   const fuzzyPage = await fs.readFile(fileURLToPath(fuzzyBrowser.stdout.trim()), 'utf8');
   assert.match(fuzzyPage, /Tripper Travel Planning/);
   assert.match(fuzzyPage, /<strong>Match:<\/strong> Fuzzy \d+% · title/);
+
+  const cancelled = await runInteractiveCli(['open', 'amiga'], { env });
+  assert.equal(cancelled.code, 0, cancelled.stderr);
+  assert.match(cancelled.stdout, /Multiple bookmarks found:/);
+  assert.match(cancelled.stdout, /Cancelled\./);
 
   await assert.rejects(
     () => run(process.execPath, [cli, 'open', 'amiga', '--dry-run'], { env }),

@@ -55,40 +55,48 @@ function plainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function validateClient(client) {
+function clientCompatibilityWarnings(client) {
+  const warnings = [];
   if (!plainObject(client) || !Number.isInteger(client.api_protocol)) {
-    throw new ApiContractError(
-      'Browser add-on is out of date and may not save all bookmark fields. Reload or update the Markdown Bookmarks browser add-on and try again. Bookmark was not saved.',
-      { status: 409, code: 'browser_addon_update_required' }
-    );
+    warnings.push({
+      code: 'browser_addon_update_required',
+      message: 'Bookmark saved with the fields supplied by a legacy browser add-on. Reload or update the Markdown Bookmarks browser add-on to capture all available metadata.'
+    });
+    return warnings;
   }
   if (client.api_protocol < MINIMUM_EXTENSION_PROTOCOL) {
-    throw new ApiContractError(
-      `Browser add-on protocol ${client.api_protocol} is no longer supported. Reload or update the Markdown Bookmarks browser add-on and try again. Bookmark was not saved.`,
-      { status: 409, code: 'browser_addon_update_required' }
-    );
+    warnings.push({
+      code: 'browser_addon_update_required',
+      message: `Bookmark saved with browser add-on protocol ${client.api_protocol}. Reload or update the Markdown Bookmarks browser add-on to capture all available metadata.`
+    });
   }
   if (client.api_protocol > API_PROTOCOL_VERSION) {
-    throw new ApiContractError(
-      'The browser add-on is newer than the companion. Update and restart the Markdown Bookmarks companion, then try again. Bookmark was not saved.',
-      { status: 409, code: 'companion_update_required' }
-    );
+    warnings.push({
+      code: 'companion_update_required',
+      message: 'The browser add-on is newer than the companion. Supported fields were saved; update and restart the companion to save all available metadata.'
+    });
   }
   if (client.type !== 'browser-extension' || typeof client.version !== 'string' || !client.version.trim()) {
-    throw new ApiContractError('Invalid browser add-on identity.', { status: 422, code: 'invalid_client' });
+    warnings.push({
+      code: 'browser_addon_update_required',
+      message: 'Browser add-on identity was missing or invalid. Supported fields were saved; reload or update the browser add-on.'
+    });
   }
+  return warnings;
 }
 
-function validateBookmark(bookmark) {
-  if (!plainObject(bookmark)) throw new ApiContractError('bookmark must be an object');
+function normalizeBookmark(input, warnings) {
+  if (!plainObject(input)) throw new ApiContractError('bookmark must be an object');
   const allowed = new Set([...BOOKMARK_INPUT_FIELDS, ...Object.keys(DEPRECATED_BOOKMARK_FIELDS)]);
-  const unknown = Object.keys(bookmark).filter((field) => !allowed.has(field));
+  const unknown = Object.keys(input).filter((field) => !allowed.has(field));
   if (unknown.length) {
-    throw new ApiContractError(
-      `Bookmark was not saved because the companion does not support field${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}. Update the companion and try again.`,
-      { status: 422, code: 'unsupported_fields' }
-    );
+    warnings.push({
+      code: 'unsupported_fields_ignored',
+      fields: unknown,
+      message: `Bookmark saved, but unsupported field${unknown.length === 1 ? ' was' : 's were'} omitted: ${unknown.join(', ')}. Update the companion to save them.`
+    });
   }
+  const bookmark = Object.fromEntries(Object.entries(input).filter(([field]) => allowed.has(field)));
   if (typeof bookmark.url !== 'string' || !bookmark.url.trim()) {
     throw new ApiContractError('url must be a non-empty string');
   }
@@ -111,28 +119,39 @@ function validateBookmark(bookmark) {
     const allowedCaptureFields = new Set(['id', 'os', 'architecture', 'browser', 'browser_version', 'device']);
     const unknownCaptureFields = Object.keys(bookmark.capture).filter((field) => !allowedCaptureFields.has(field));
     if (unknownCaptureFields.length) {
-      throw new ApiContractError(`Unsupported capture field: ${unknownCaptureFields.join(', ')}`);
+      warnings.push({
+        code: 'unsupported_fields_ignored',
+        fields: unknownCaptureFields.map((field) => `capture.${field}`),
+        message: `Bookmark saved, but unsupported capture field${unknownCaptureFields.length === 1 ? ' was' : 's were'} omitted: ${unknownCaptureFields.join(', ')}.`
+      });
     }
+    bookmark.capture = Object.fromEntries(Object.entries(bookmark.capture)
+      .filter(([field]) => allowedCaptureFields.has(field)));
     if (Object.values(bookmark.capture).some((value) => typeof value !== 'string')) {
       throw new ApiContractError('capture fields must be strings');
     }
   }
+  return { bookmark, ignoredFields: unknown };
 }
 
 export function parseBrowserSaveRequest(payload) {
-  if (!plainObject(payload) || !Object.hasOwn(payload, 'bookmark')) {
-    throw new ApiContractError(
-      'Browser add-on is out of date and may not save all bookmark fields. Reload or update the Markdown Bookmarks browser add-on and try again. Bookmark was not saved.',
-      { status: 409, code: 'browser_addon_update_required' }
-    );
-  }
-  const envelopeFields = Object.keys(payload).filter((field) => !['client', 'bookmark'].includes(field));
-  if (envelopeFields.length) throw new ApiContractError(`Unsupported request field: ${envelopeFields.join(', ')}`);
-  validateClient(payload.client);
-  validateBookmark(payload.bookmark);
-
-  const bookmark = { ...payload.bookmark };
+  if (!plainObject(payload)) throw new ApiContractError('Request body must be an object');
+  const legacyClient = !Object.hasOwn(payload, 'bookmark');
   const warnings = [];
+  const input = legacyClient ? payload : payload.bookmark;
+  const client = legacyClient ? undefined : payload.client;
+  if (legacyClient) warnings.push(...clientCompatibilityWarnings(undefined));
+  else {
+    warnings.push(...clientCompatibilityWarnings(client));
+    const envelopeFields = Object.keys(payload).filter((field) => !['client', 'bookmark'].includes(field));
+    if (envelopeFields.length) warnings.push({
+      code: 'unsupported_fields_ignored',
+      fields: envelopeFields,
+      message: `Unsupported request field${envelopeFields.length === 1 ? '' : 's'} were ignored: ${envelopeFields.join(', ')}.`
+    });
+  }
+  const normalized = normalizeBookmark(input, warnings);
+  const bookmark = normalized.bookmark;
   if (bookmark.sender !== undefined) {
     if (bookmark.shared_by !== undefined && bookmark.shared_by !== bookmark.sender) {
       throw new ApiContractError('sender and shared_by contain conflicting values');
@@ -149,8 +168,10 @@ export function parseBrowserSaveRequest(payload) {
 
   return {
     bookmark,
-    client: payload.client,
+    client,
     warnings,
-    processedFields: Object.keys(payload.bookmark)
+    processedFields: Object.keys(input).filter((field) => !normalized.ignoredFields.includes(field)),
+    ignoredFields: normalized.ignoredFields,
+    legacyClient
   };
 }

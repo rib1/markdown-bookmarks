@@ -105,22 +105,29 @@ access_count: 1
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ url: 'https://example.test/legacy-addon' })
   });
-  const legacyError = await legacyResponse.json();
-  assert.equal(legacyResponse.status, 409);
-  assert.equal(legacyError.code, 'browser_addon_update_required');
-  assert.match(legacyError.error, /Reload or update.*browser add-on/);
-  assert.equal((await findBookmarks('legacy-addon', bookmarkVault)).length, 0);
+  const legacyWarning = await legacyResponse.json();
+  assert.equal(legacyResponse.status, 201);
+  assert.equal(legacyWarning.ok, false);
+  assert.equal(legacyWarning.saved, true);
+  assert.equal(legacyWarning.code, 'browser_addon_update_required');
+  assert.match(legacyWarning.error, /Reload or update.*browser add-on/);
+  assert.equal((await findBookmarks('legacy-addon', bookmarkVault)).length, 1);
 
   const unsupportedResponse = await fetch(`http://127.0.0.1:${port}/bookmarks`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(browserRequest({
-      url: 'https://example.test/unsupported-field', lost_field: 'must reject'
+      url: 'https://example.test/unsupported-field', lost_field: 'must warn'
     }))
   });
-  assert.equal(unsupportedResponse.status, 422);
-  assert.equal((await unsupportedResponse.json()).code, 'unsupported_fields');
-  assert.equal((await findBookmarks('unsupported-field', bookmarkVault)).length, 0);
+  assert.equal(unsupportedResponse.status, 201);
+  const unsupportedWarning = await unsupportedResponse.json();
+  assert.equal(unsupportedWarning.ok, true);
+  assert.equal(unsupportedWarning.warnings[0].code, 'unsupported_fields_ignored');
+  assert.deepEqual(unsupportedWarning.ignored_fields, ['lost_field']);
+  const partiallySaved = await findBookmarks('unsupported-field', bookmarkVault);
+  assert.equal(partiallySaved.length, 1);
+  assert.doesNotMatch(partiallySaved[0].content, /lost_field|must warn/);
 
   const response = await fetch(`http://127.0.0.1:${port}/bookmarks`, {
     method: 'POST',

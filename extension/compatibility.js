@@ -33,19 +33,12 @@ export function assessCapabilities(capabilities, requestedFields = []) {
       error: 'The companion is too old to verify browser add-on compatibility. Update and restart the Markdown Bookmarks companion before saving.'
     };
   }
+  const warnings = [];
   if (capabilities.minimum_extension_protocol > EXTENSION_API_PROTOCOL) {
-    return {
-      ok: false,
-      code: 'browser_addon_update_required',
-      error: 'Browser add-on is out of date and may not save all bookmark fields. Reload or update the Markdown Bookmarks browser add-on before saving.'
-    };
+    warnings.push('Browser add-on is out of date. Supported fields will be saved; reload or update the browser add-on to capture all available metadata.');
   }
   if (capabilities.api_protocol < EXTENSION_API_PROTOCOL) {
-    return {
-      ok: false,
-      code: 'companion_update_required',
-      error: 'The browser add-on is newer than the companion. Update and restart the Markdown Bookmarks companion before saving.'
-    };
+    warnings.push('The browser add-on is newer than the companion. Supported fields will be saved; update and restart the companion to save all available metadata.');
   }
   const acceptedFields = new Set([
     ...(capabilities.accepted_fields || []),
@@ -53,11 +46,16 @@ export function assessCapabilities(capabilities, requestedFields = []) {
   ]);
   const unsupported = requestedFields.filter((field) => !acceptedFields.has(field));
   if (unsupported.length) {
-    return {
-      ok: false,
-      code: 'companion_update_required',
-      error: `The companion cannot save browser field${unsupported.length === 1 ? '' : 's'}: ${unsupported.join(', ')}. Update the companion before saving.`
-    };
+    warnings.push(`The companion cannot save browser field${unsupported.length === 1 ? '' : 's'}: ${unsupported.join(', ')}. Those fields were omitted; update the companion to save them.`);
   }
-  return { ok: true };
+  return { ok: true, warnings, unsupportedFields: unsupported };
+}
+
+export function saveResultMessage(response) {
+  if (!response.ok && !response.saved) return response.error;
+  const warnings = (response.warnings || []).map((warning) => `Warning: ${warning.message}`);
+  if (response.saved && response.error && !warnings.some((warning) => warning.includes(response.error))) {
+    warnings.push(`Warning: ${response.error}`);
+  }
+  return ['Saved.', ...warnings].join('\n');
 }

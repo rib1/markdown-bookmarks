@@ -1,6 +1,7 @@
+import { saveResultMessage } from './compatibility.js';
+
 const form = document.querySelector('#form');
 const resultOutput = document.querySelector('#result');
-const compatibilityOutput = document.querySelector('#compatibility');
 const sharedByInput = document.querySelector('#shared-by');
 const deviceInput = document.querySelector('#device');
 
@@ -21,21 +22,11 @@ async function rememberSender(sender) {
   await chrome.storage.local.set({ recentSenders: updated });
 }
 
-const compatibilityCheck = chrome.runtime.sendMessage({ action: 'get-capabilities' }).then((response) => {
-  compatibilityOutput.textContent = response.ok ? '' : response.error;
-  return response;
-});
-
 loadRecentSenders();
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   resultOutput.textContent = '';
-  const compatibility = await compatibilityCheck;
-  if (!compatibility.ok) {
-    resultOutput.textContent = compatibility.error;
-    return;
-  }
   const params = new URLSearchParams(location.search);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const capturedTab = params.has('test-url')
@@ -58,12 +49,11 @@ form.addEventListener('submit', async (event) => {
   };
   const device = deviceInput.value.trim();
   const response = await chrome.runtime.sendMessage({ action: 'save-bookmark', bookmark, device });
-  if (response.ok) {
+  if (response.ok || response.saved) {
     await rememberSender(sharedBy);
     await chrome.storage.local.set({ deviceLabel: device });
-    const warnings = (response.warnings || []).map((warning) => `Warning: ${warning.message}`);
-    resultOutput.textContent = ['Saved.', ...warnings].join('\n');
-  } else resultOutput.textContent = response.error;
+  }
+  resultOutput.textContent = saveResultMessage(response);
 });
 
 function extractPageMetadata() {
