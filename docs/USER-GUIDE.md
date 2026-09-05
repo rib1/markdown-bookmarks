@@ -146,6 +146,11 @@ starts listening.
 
 The current prototype is not yet packaged for a browser store.
 
+The add-on and companion verify API compatibility before saving. After pulling
+application changes, restart the companion and reload the unpacked add-on. If
+the add-on is too old, saving is blocked and the popup tells you to reload or
+update it; the bookmark is not partially saved.
+
 ## Reload the extension after changes
 
 1. Keep the companion running:
@@ -169,7 +174,11 @@ and save the page. Inspect the generated Markdown file in the private vault.
 1. Open the page to keep.
 2. Click the Markdown Bookmarks toolbar icon.
 3. Enter comma-separated tags, such as `work,database,reference`.
-4. Click **Save current tab**.
+4. If someone sent the link, optionally enter their name in **Shared by** and
+   the channel in **Via**.
+5. Optionally expand **Save source** and set a memorable device label such as
+   `home-mac` or `work-windows`. The label is remembered locally.
+6. Click **Save current tab**.
 
 The companion creates a file under:
 
@@ -178,6 +187,18 @@ my-bookmarks/bookmarks/YYYY/MM/<id>-page-title.md
 ```
 
 The file is ordinary Markdown and can be opened without this application.
+
+Sender information is stored only when supplied. It is separate from the page
+author, and saving the same URL from another person appends another share event.
+Browser saves also append capture provenance containing the device label, OS,
+architecture, browser/version, and add-on version. This makes it possible to
+distinguish saves from home and work machines. The add-on does not record the
+machine hostname, username, IP address, geolocation, or full user-agent string.
+
+Most destination URLs do not reliably identify who sent them. The add-on does
+not treat article authors, repository owners, referral tokens, or campaign
+parameters as senders. Future site-specific extraction may offer a suggestion,
+but it must be confirmed before it is stored.
 
 GitHub bookmarks receive repository and owner metadata when available. YouTube
 bookmarks are classified as videos and always receive the `youtube` tag.
@@ -226,13 +247,20 @@ docker compose exec bookmarkd node src/cli.js find database
 ```
 
 The same command works in a macOS/Linux shell. Search covers the Markdown
-bookmark content, including URLs, titles, tags, and summaries.
+bookmark content, including URLs, titles, tags, summaries, sender names,
+sharing channels, and browser/device capture information.
 
 With the npm companion, set `BOOKMARK_VAULT` in the CLI terminal as shown above
 and run:
 
 ```powershell
 npm run bookmark -- find database
+```
+
+The CLI can also record manually supplied sender information:
+
+```powershell
+npm run bookmark -- save --url https://example.test/page --title "Useful page" --shared-by Alice --via Signal
 ```
 
 Exact substring matching is the default. For typo-tolerant ranked results, add
@@ -354,3 +382,7 @@ to that directory when requested.
 
 If the extension is missing, reload it from `chrome://extensions` and select
 the `extension` directory itself.
+
+For **Browser add-on is out of date**, restart the updated companion, open
+`chrome://extensions`, and click **Reload** on Markdown Bookmarks. The companion
+blocks incompatible requests before writing, so retry the save after reloading.

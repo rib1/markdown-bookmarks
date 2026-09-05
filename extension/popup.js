@@ -1,6 +1,41 @@
-document.querySelector('#form').addEventListener('submit', async (event) => {
+const form = document.querySelector('#form');
+const resultOutput = document.querySelector('#result');
+const compatibilityOutput = document.querySelector('#compatibility');
+const sharedByInput = document.querySelector('#shared-by');
+const deviceInput = document.querySelector('#device');
+
+async function loadRecentSenders() {
+  const { recentSenders = [], deviceLabel = '' } = await chrome.storage.local.get(['recentSenders', 'deviceLabel']);
+  deviceInput.value = deviceLabel;
+  document.querySelector('#recent-senders').replaceChildren(...recentSenders.map((sender) => {
+    const option = document.createElement('option');
+    option.value = sender;
+    return option;
+  }));
+}
+
+async function rememberSender(sender) {
+  if (!sender) return;
+  const { recentSenders = [] } = await chrome.storage.local.get('recentSenders');
+  const updated = [sender, ...recentSenders.filter((value) => value !== sender)].slice(0, 10);
+  await chrome.storage.local.set({ recentSenders: updated });
+}
+
+const compatibilityCheck = chrome.runtime.sendMessage({ action: 'get-capabilities' }).then((response) => {
+  compatibilityOutput.textContent = response.ok ? '' : response.error;
+  return response;
+});
+
+loadRecentSenders();
+
+form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  document.querySelector('#result').textContent = '';
+  resultOutput.textContent = '';
+  const compatibility = await compatibilityCheck;
+  if (!compatibility.ok) {
+    resultOutput.textContent = compatibility.error;
+    return;
+  }
   const params = new URLSearchParams(location.search);
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const capturedTab = params.has('test-url')
@@ -10,14 +45,25 @@ document.querySelector('#form').addEventListener('submit', async (event) => {
   if (!params.has('test-url') && capturedTab?.id) {
     [pageData] = await chrome.scripting.executeScript({ target: { tabId: capturedTab.id }, func: extractPageMetadata });
   }
-  const response = await chrome.runtime.sendMessage({
+  const sharedBy = sharedByInput.value.trim();
+  const sharedVia = document.querySelector('#shared-via').value.trim();
+  const bookmark = {
     url: capturedTab?.url,
     title: capturedTab?.title,
     contexts: document.querySelector('#context').value ? [document.querySelector('#context').value] : [],
     ...pageData?.result,
-    tags: document.querySelector('#tags').value.split(',')
-  });
-  document.querySelector('#result').textContent = response.ok ? 'Saved.' : response.error;
+    tags: document.querySelector('#tags').value.split(','),
+    ...(sharedBy ? { shared_by: sharedBy } : {}),
+    ...(sharedVia ? { shared_via: sharedVia } : {}),
+  };
+  const device = deviceInput.value.trim();
+  const response = await chrome.runtime.sendMessage({ action: 'save-bookmark', bookmark, device });
+  if (response.ok) {
+    await rememberSender(sharedBy);
+    await chrome.storage.local.set({ deviceLabel: device });
+    const warnings = (response.warnings || []).map((warning) => `Warning: ${warning.message}`);
+    resultOutput.textContent = ['Saved.', ...warnings].join('\n');
+  } else resultOutput.textContent = response.error;
 });
 
 function extractPageMetadata() {

@@ -14,7 +14,7 @@ import {
   SEARCH_RESULTS_MAX_AGE_MS
 } from '../src/search-results-page.js';
 
-function result(file, { title, url, tags = [], contexts = [], savedAt = '2026-09-05T10:00:00.000Z' }) {
+function result(file, { title, url, tags = [], contexts = [], shares = [], captures = [], savedAt = '2026-09-05T10:00:00.000Z' }) {
   const list = (values) => values.length
     ? values.map((value) => `  - ${JSON.stringify(value)}`).join('\n')
     : '  []';
@@ -27,7 +27,7 @@ tags:
 ${list(tags)}
 contexts:
 ${list(contexts)}
-last_saved_at: ${savedAt}
+${shares.length ? `share_history:\n${list(shares)}\n` : ''}${captures.length ? `capture_history:\n${list(captures)}\n` : ''}last_saved_at: ${savedAt}
 ---
 `
   };
@@ -45,7 +45,9 @@ test('renders safe, sorted search-result HTML with useful metadata', () => {
       title: 'Alpha result',
       url: 'https://example.test/page?a=1&b=2',
       tags: ['reference'],
-      contexts: ['travel']
+      contexts: ['travel'],
+      shares: [{ id: 'one', sender: 'Alice <Admin>', channel: 'Signal' }],
+      captures: [{ id: 'one', device: 'home-mac<script>', os: 'mac' }]
     })
   ]);
 
@@ -55,6 +57,8 @@ test('renders safe, sorted search-result HTML with useful metadata', () => {
   assert.match(html, /example\.test/);
   assert.match(html, />reference</);
   assert.match(html, />travel</);
+  assert.match(html, /Alice &lt;Admin&gt; via Signal/);
+  assert.match(html, /home-mac&lt;script&gt;/);
   assert.match(html, /2026-09-05T10:00:00\.000Z/);
   assert.match(html, /Beta &lt;img src=x onerror=alert\(1\)&gt;/);
   assert.doesNotMatch(html, /<img|<script/);

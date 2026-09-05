@@ -132,7 +132,7 @@ function printHelp() {
   console.log(`Markdown Bookmarks commands:
   init [--path PATH] [--no-skill]
   skill install [--path PATH]
-  save --url URL [--title TITLE] [--tags tag1,tag2]
+  save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
   find QUERY [--saved-within PERIOD] [--saved-since DATE] [--fuzzy] [--browser] [--with BROWSER] [--dry-run]
   open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]
 
@@ -141,6 +141,7 @@ npm syntax:
   --browser, --fuzzy, --pick, --with, and --dry-run to the bookmark CLI.
 
 Common workflows:
+  npm run bookmark -- save --url https://example.test/page --shared-by Alice --via Signal
   npm run bookmark -- find database
   npm run bookmark -- open database --pick 3
   npm run bookmark -- open database --pick 3 --with firefox
@@ -190,8 +191,14 @@ if (command === 'help' || command === '--help' || command === '-h') {
   console.log(`LLM skill installed in vault: ${target}`);
 } else if (command === 'save') {
   const url = option('--url');
-  if (!url) throw new Error('Usage: npm run bookmark -- save --url URL --title TITLE --tags tag1,tag2');
-  const result = await saveBookmark({ url, title: option('--title'), tags: (option('--tags') || '').split(',') });
+  if (!url) throw new Error('Usage: npm run bookmark -- save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]');
+  const result = await saveBookmark({
+    url,
+    title: option('--title'),
+    tags: (option('--tags') || '').split(','),
+    shared_by: option('--shared-by'),
+    shared_via: option('--via')
+  });
   console.log(JSON.stringify(result, null, 2));
 } else if (command === 'find') {
   const query = positionalArgument(['--saved-within', '--saved-since', '--with']);

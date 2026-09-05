@@ -24,12 +24,14 @@ async function readEventually(file) {
 test('CLI help lists commands, launch options, browser choices, and linked workflows', async () => {
   const generalHelp = await run(process.execPath, [cli, 'help']);
   assert.match(generalHelp.stdout, /Markdown Bookmarks commands:/);
+  assert.match(generalHelp.stdout, /save --url URL .*--shared-by NAME.*--via CHANNEL/);
   assert.match(generalHelp.stdout, /find QUERY .*--with BROWSER/);
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
   assert.match(generalHelp.stdout, /find QUERY .*--fuzzy.*--browser/);
   assert.match(generalHelp.stdout, /Keep the "--" in "npm run bookmark -- COMMAND"/);
   assert.match(generalHelp.stdout, /--browser, --fuzzy, --pick, --with, and --dry-run/);
   assert.match(generalHelp.stdout, /Common workflows:/);
+  assert.match(generalHelp.stdout, /save --url https:\/\/example\.test\/page --shared-by Alice --via Signal/);
   assert.match(generalHelp.stdout, /find database\n\s+npm run bookmark -- open database --pick 3/);
   assert.match(generalHelp.stdout, /open database --pick 3 --with firefox/);
   assert.match(generalHelp.stdout, /find database --browser --with chrome/);
@@ -73,17 +75,22 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   assert.equal(emptyBrowserSearch.stdout.trim(), 'No bookmarks found for: triper');
   await assert.rejects(() => fs.access(path.join(root, 'views', '.search-results')), { code: 'ENOENT' });
 
-  const saved = await run(process.execPath, [cli, 'save', '--url', 'https://example.test/cli', '--title', 'CLI Amiga', '--tags', 'amiga,test'], { env });
+  const saved = await run(process.execPath, [cli, 'save', '--url', 'https://example.test/cli', '--title', 'CLI Amiga',
+    '--tags', 'amiga,test', '--shared-by', 'Alice', '--via', 'Signal'], { env });
   const savedResult = JSON.parse(saved.stdout);
   assert.ok(savedResult.file);
   const savedContent = await fs.readFile(savedResult.file, 'utf8');
   const savedId = savedContent.match(/^id:\s*([^\r\n]+)$/m)?.[1];
   assert.ok(savedId);
+  assert.match(savedContent, /"sender":"Alice"/);
+  assert.match(savedContent, /"channel":"Signal"/);
 
   const found = await run(process.execPath, [cli, 'find', 'amiga'], { env });
   assert.match(found.stdout, /URL: https:\/\/example.test\/cli/);
   assert.match(found.stdout, /- "amiga"/);
   assert.match(found.stdout, /title: "CLI Amiga"/);
+  const foundBySender = await run(process.execPath, [cli, 'find', 'Alice'], { env });
+  assert.match(foundBySender.stdout, /URL: https:\/\/example.test\/cli/);
 
   const opened = await run(process.execPath, [cli, 'open', 'amiga', '--dry-run'], { env });
   assert.equal(opened.stdout.trim(), 'https://example.test/cli');
