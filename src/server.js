@@ -11,6 +11,7 @@ import { saveBookmark, vaultRoot } from './vault.js';
 
 const port = Number(process.env.PORT || 8787);
 const vault = vaultRoot();
+const startedAt = new Date().toISOString();
 const migration = await migrateVault(vault);
 const purgedSearchPages = await cleanupStaleSearchResultPages();
 
@@ -62,7 +63,11 @@ server.listen(port, '0.0.0.0', () => {
       `vault migration ran: ${script}; schema: ${fromVersion} -> ${toVersion}`)
     : [`vault migrations: none; schema remains: ${migration.schemaVersion}`];
   console.log([
+    `bookmark companion started at: ${startedAt}`,
     ...migrationLog,
+    ...(migration.migrationsRun.length ? [
+      `vault migration changes: normalized tags: ${migration.normalizedTags}; OS device labels added: ${migration.osLabelsAdded}`
+    ] : []),
     `vault AGENTS.md: ${migration.agentInstructions}`,
     `stale search-result pages purged: ${purgedSearchPages}`,
     `bookmark companion listening on ${port}; vault: ${vault}; schema: ${migration.schemaVersion}; migrated: ${migration.migrated}; API protocol: ${API_PROTOCOL_VERSION}`

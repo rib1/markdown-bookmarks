@@ -59,7 +59,7 @@ Bookmark files use YAML frontmatter followed by ordinary Markdown. Current core
 frontmatter includes:
 
 - `schema_version`, stable `id`, `url`, `canonical_url`, `title`, and `type`
-- `contexts` and `tags` for classification
+- `contexts` and lowercase, case-insensitively deduplicated `tags` for classification
 - optional site metadata such as `site`, `repository`, `author`, or source IDs
   such as `video_id` and `imgur_id`
 - `published_at`, `published_at_source`, and `published_at_confidence` when a
@@ -69,8 +69,9 @@ frontmatter includes:
 - optional `share_history` receipt events containing sender, channel, receipt
   time, source, and confidence
 - optional `capture_history` events identifying where browser saves happened,
-  including a user-chosen device label, OS, architecture, browser/version, and
-  browser add-on version
+  including a device label, OS, architecture, browser/version, and browser
+  add-on version. The device label defaults to the OS when the user has not set
+  a more specific machine label.
 - optional typed relationships such as `references`, `supports`, `alternative`,
   `follow-up`, and `duplicate`
 

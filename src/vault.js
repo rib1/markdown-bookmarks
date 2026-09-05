@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {
   normalizeUrl,
+  normalizeTags,
   readList,
   readScalar,
   replaceList,
@@ -95,13 +96,13 @@ export async function saveBookmark(input, root = vaultRoot()) {
   const captureEvent = createCaptureEvent(input, now);
   const id = input.id || crypto.randomUUID();
   const title = input.title || input.url;
-  const tags = [...new Set((input.tags || []).map(String).map((v) => v.trim()).filter(Boolean))];
+  const tags = normalizeTags(input.tags);
   const canonicalUrl = normalizeUrl(input.url);
   const existing = await findBookmarkByUrl(canonicalUrl, root);
   if (existing) {
     let content = migrateBookmarkContent(existing.content).content;
     const oldTags = readList(content, 'tags');
-    const mergedTags = [...new Set([...oldTags, ...tags])];
+    const mergedTags = normalizeTags([...oldTags, ...tags]);
     content = replaceList(content, 'tags', mergedTags);
     if (input.contexts?.length) {
       const oldContexts = readList(content, 'contexts');

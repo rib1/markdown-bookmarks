@@ -24,13 +24,15 @@ export function createCaptureEvent(input, savedAt) {
     throw new Error('capture.id must contain only letters, numbers, dots, underscores, and hyphens');
   }
   const client = input.capture_client || {};
+  const os = optionalText(input.capture.os, 'os');
+  const device = optionalText(input.capture.device, 'device', 200) || os;
   return {
     id,
     saved_at: savedAt,
     client: 'browser-extension',
     ...(optionalText(client.version, 'extension_version') ? { extension_version: client.version.trim() } : {}),
-    ...(optionalText(input.capture.device, 'device', 200) ? { device: input.capture.device.trim() } : {}),
-    ...(optionalText(input.capture.os, 'os') ? { os: input.capture.os.trim() } : {}),
+    ...(device ? { device } : {}),
+    ...(os ? { os } : {}),
     ...(optionalText(input.capture.architecture, 'architecture') ? { architecture: input.capture.architecture.trim() } : {}),
     ...(optionalText(input.capture.browser, 'browser') ? { browser: input.capture.browser.trim() } : {}),
     ...(optionalText(input.capture.browser_version, 'browser_version') ? { browser_version: input.capture.browser_version.trim() } : {})

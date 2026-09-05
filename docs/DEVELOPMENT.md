@@ -103,7 +103,8 @@ example, `001-bookmark-schema-v1.js`). Register new upgrades in
 `src/migrations/index.js`; keep the runner generic and do not add migration
 details to `src/vault.js`. A migration module exports its `script`,
 `fromVersion`, and target `version` so startup logging can identify exactly
-which upgrade ran.
+which upgrade ran. Startup logging also includes the companion process start
+time as an ISO-8601 timestamp.
 
 Schema version 1 adds per-bookmark `schema_version`, backfills safe core fields,
 renames `first_opened_at`, `last_opened_at`, and `access_count` to their `saved`
@@ -113,11 +114,11 @@ intentional. Vault initialization and migration also ignore macOS `.DS_Store`
 files and `views/.search-results/` without replacing existing `.gitignore`
 rules.
 
-New optional `share_history` and `capture_history` fields remain compatible
-with schema version 1. Existing bookmarks are valid without them, so adding
-these fields does not run a migration or rewrite the vault. Increment the
-schema only when existing stored data needs conversion or existing readers can
-no longer interpret the format.
+Schema version 2 lowercases and case-insensitively deduplicates existing tags.
+It also fills a missing capture `device` label from the recorded OS while
+preserving explicit device labels and unknown fields. New saves apply both
+rules before writing. Increment the schema only when existing stored data needs
+conversion or existing readers can no longer interpret the format.
 
 ## Browser API compatibility
 

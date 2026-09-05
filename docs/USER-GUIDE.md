@@ -105,7 +105,8 @@ On startup, the companion compares `.markdown-bookmarks.json` with the current
 application schema and runs pending Markdown migrations before accepting saves.
 It reports each migration script and version transition, or says that no
 migrations ran. The same startup pass installs or refreshes the vault-root
-`AGENTS.md`, then reports the current schema and migrated-file count. Review and
+`AGENTS.md`, then reports the process start time, current schema, and
+migrated-file count. Review and
 commit resulting private-vault changes with host Git; the companion never
 commits or pushes them.
 
@@ -174,7 +175,9 @@ and save the page. Inspect the generated Markdown file in the private vault.
 
 1. Open the page to keep.
 2. Click the Markdown Bookmarks toolbar icon.
-3. Enter comma-separated tags, such as `work,database,reference`.
+3. Enter comma-separated tags, such as `work,database,reference`. Tags are
+   stored in lowercase and duplicate spellings that differ only by case are
+   combined.
 4. If someone sent the link, optionally enter their name in **Shared by** and
    the channel in **Via**.
 5. Optionally expand **Save source** and set a memorable device label such as
@@ -193,7 +196,9 @@ Sender information is stored only when supplied. It is separate from the page
 author, and saving the same URL from another person appends another share event.
 Browser saves also append capture provenance containing the device label, OS,
 architecture, browser/version, and add-on version. This makes it possible to
-distinguish saves from home and work machines. The add-on does not record the
+distinguish saves from home and work machines. If no custom label is set, the
+OS (`mac`, `win`, and so on) is used as the device label. Set a custom label to
+distinguish multiple machines using the same OS. The add-on does not record the
 machine hostname, username, IP address, geolocation, or full user-agent string.
 
 Most destination URLs do not reliably identify who sent them. The add-on does

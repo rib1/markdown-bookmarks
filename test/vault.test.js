@@ -103,11 +103,10 @@ Legacy data.
   const migrated = await fs.readFile(file, 'utf8');
   assert.equal(first.fromSchemaVersion, 0);
   assert.equal(first.schemaVersion, BOOKMARK_SCHEMA_VERSION);
-  assert.deepEqual(first.migrationsRun, [{
-    script: '001-bookmark-schema-v1.js',
-    fromVersion: 0,
-    toVersion: 1
-  }]);
+  assert.deepEqual(first.migrationsRun, [
+    { script: '001-bookmark-schema-v1.js', fromVersion: 0, toVersion: 1 },
+    { script: '002-normalize-tags-and-capture-labels.js', fromVersion: 1, toVersion: 2 }
+  ]);
   assert.equal(first.scanned, 1);
   assert.equal(first.migrated, 1);
   assert.equal(first.repairedTags, 1);
@@ -135,6 +134,58 @@ Legacy data.
   assert.equal(await fs.readFile(file, 'utf8'), migrated);
 });
 
+test('normalizes old tag case and adds OS capture labels once', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-schema-2-'));
+  const directory = path.join(root, 'bookmarks', '2026', '09');
+  const file = path.join(directory, 'mixed-case.md');
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(path.join(root, '.markdown-bookmarks.json'), '{"schema_version":1}\n', 'utf8');
+  await fs.writeFile(file, `---
+schema_version: 1
+id: mixed-case
+url: "https://example.test/mixed-case"
+canonical_url: "https://example.test/mixed-case"
+title: "Mixed case"
+type: bookmark
+contexts:
+  []
+tags:
+  - "KSA"
+  - "ksa"
+  - "Ai-Assisted"
+capture_history:
+  - {"id":"mac-capture","os":"mac","browser":"Google Chrome"}
+  - {"id":"custom-capture","device":"home-mac","os":"mac","custom":"preserved"}
+saved_at: 2026-09-05T10:00:00.000Z
+first_saved_at: 2026-09-05T10:00:00.000Z
+last_saved_at: 2026-09-05T10:00:00.000Z
+save_count: 1
+save_history:
+  - "2026-09-05T10:00:00.000Z"
+---
+`, 'utf8');
+
+  const first = await migrateVault(root);
+  const migrated = await fs.readFile(file, 'utf8');
+  assert.deepEqual(first.migrationsRun, [
+    { script: '002-normalize-tags-and-capture-labels.js', fromVersion: 1, toVersion: 2 }
+  ]);
+  assert.equal(first.normalizedTags, 3);
+  assert.equal(first.osLabelsAdded, 1);
+  assert.deepEqual(metadataList(migrated, 'tags'), ['ksa', 'ai-assisted']);
+  assert.deepEqual(metadataList(migrated, 'capture_history'), [
+    { id: 'mac-capture', os: 'mac', browser: 'Google Chrome', device: 'mac' },
+    { id: 'custom-capture', device: 'home-mac', os: 'mac', custom: 'preserved' }
+  ]);
+  assert.match(migrated, /schema_version: 2/);
+
+  const second = await migrateVault(root);
+  assert.equal(second.skipped, true);
+  assert.equal(second.normalizedTags, 0);
+  assert.equal(second.osLabelsAdded, 0);
+  assert.equal(await fs.readFile(file, 'utf8'), migrated);
+});
+
 test('installs and refreshes vault AGENTS.md when migrations are checked', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-agents-'));
   const target = path.join(root, 'AGENTS.md');
@@ -147,6 +198,7 @@ test('installs and refreshes vault AGENTS.md when migrations are checked', async
   assert.match(template, /How to search/);
   assert.match(template, /share_history/);
   assert.match(template, /capture_history/);
+  assert.match(template, /device label defaults to the OS/);
   assert.match(template, /imgur_id/);
   assert.match(template, /Missing sender data is normal/);
 
@@ -272,7 +324,7 @@ test('stores optional sender history without changing the schema or empty bookma
   }, root);
   const content = await fs.readFile(first.file, 'utf8');
   const shares = metadataList(content, 'share_history');
-  assert.equal(BOOKMARK_SCHEMA_VERSION, 1);
+  assert.equal(BOOKMARK_SCHEMA_VERSION, 2);
   assert.equal(shares.length, 2);
   assert.deepEqual(shares[0], {
     id: 'share-one', sender: 'Alice', channel: 'Signal',
@@ -332,6 +384,22 @@ test('records searchable browser and device capture history on every save', asyn
   const fuzzy = await findBookmarks('work-widnows', root, { fuzzy: true });
   assert.equal(fuzzy.length, 1);
   assert.deepEqual(fuzzy[0].matchedFields, ['capture_source']);
+});
+
+test('normalizes new tag case and uses OS as the default device label', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-normalized-'));
+  const saved = await saveBookmark({
+    url: 'https://example.test/normalized', title: 'Normalized metadata',
+    tags: ['KSA', 'ksa', ' Ai-Assisted '],
+    capture_client: { version: '0.2.0' },
+    capture: { id: 'unlabeled-mac', os: 'mac', browser: 'Google Chrome' }
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/normalized', tags: ['AI-ASSISTED', 'Travel']
+  }, root);
+  const content = await fs.readFile(saved.file, 'utf8');
+  assert.deepEqual(metadataList(content, 'tags'), ['ksa', 'ai-assisted', 'travel']);
+  assert.equal(metadataList(content, 'capture_history')[0].device, 'mac');
 });
 
 test('filters bookmark search by saved time', async () => {

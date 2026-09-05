@@ -4,11 +4,12 @@ import crypto from 'node:crypto';
 import { readScalar, replaceScalar } from '../bookmark-format.js';
 import { syncVaultAgentInstructions } from '../vault-agent-instructions.js';
 import * as schemaVersion1 from './001-bookmark-schema-v1.js';
+import * as schemaVersion2 from './002-normalize-tags-and-capture-labels.js';
 
-export const BOOKMARK_SCHEMA_VERSION = 1;
+export const BOOKMARK_SCHEMA_VERSION = 2;
 export const VAULT_SCHEMA_FILE = '.markdown-bookmarks.json';
 
-const BOOKMARK_MIGRATIONS = [schemaVersion1];
+const BOOKMARK_MIGRATIONS = [schemaVersion1, schemaVersion2];
 const VAULT_GITIGNORE_RULES = ['.DS_Store', '/views/.search-results/'];
 
 async function writeAtomic(file, content) {
@@ -87,15 +88,22 @@ export function migrateBookmarkContent(original) {
   let version = parsedVersion;
   let repairedTags = 0;
   let ambiguousContextTags = 0;
+  let normalizedTags = 0;
+  let osLabelsAdded = 0;
   for (const migration of BOOKMARK_MIGRATIONS) {
     if (version >= migration.version) continue;
     const result = migration.migrate(content);
     content = replaceScalar(result.content, 'schema_version', migration.version);
-    repairedTags += result.repairedTags;
-    ambiguousContextTags += result.ambiguousContextTags;
+    repairedTags += result.repairedTags ?? 0;
+    ambiguousContextTags += result.ambiguousContextTags ?? 0;
+    normalizedTags += result.normalizedTags ?? 0;
+    osLabelsAdded += result.osLabelsAdded ?? 0;
     version = migration.version;
   }
-  return { content, fromVersion: parsedVersion, toVersion: version, repairedTags, ambiguousContextTags };
+  return {
+    content, fromVersion: parsedVersion, toVersion: version,
+    repairedTags, ambiguousContextTags, normalizedTags, osLabelsAdded
+  };
 }
 
 export async function migrateVault(root) {
@@ -119,6 +127,8 @@ export async function migrateVault(root) {
     migrated: 0,
     repairedTags: 0,
     ambiguousContextTags: 0,
+    normalizedTags: 0,
+    osLabelsAdded: 0,
     agentInstructions: undefined,
     gitignoreUpdated,
     skipped: fromSchemaVersion === BOOKMARK_SCHEMA_VERSION
@@ -137,6 +147,8 @@ export async function migrateVault(root) {
     }
     result.repairedTags += migration.repairedTags;
     result.ambiguousContextTags += migration.ambiguousContextTags;
+    result.normalizedTags += migration.normalizedTags;
+    result.osLabelsAdded += migration.osLabelsAdded;
     if (migration.fromVersion === migration.toVersion) continue;
     await writeAtomic(file, migration.content);
     result.migrated++;

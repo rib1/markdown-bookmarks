@@ -5,6 +5,11 @@ export function normalizeUrl(value) {
   return url.toString();
 }
 
+export function normalizeTags(values = []) {
+  const normalized = values.map(String).map((value) => value.trim().toLowerCase()).filter(Boolean);
+  return [...new Set(normalized)];
+}
+
 export function yamlList(values) {
   return values.length ? values.map((value) => `  - ${JSON.stringify(value)}`).join('\n') : '  []';
 }

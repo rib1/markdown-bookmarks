@@ -13,7 +13,7 @@ function request(bookmark, protocol = API_PROTOCOL_VERSION) {
   };
 }
 
-test('advertises API compatibility separately from the unchanged bookmark schema', () => {
+test('advertises API compatibility independently from the bookmark schema', () => {
   const capabilities = apiCapabilities(1);
   assert.equal(capabilities.app_version, '0.2.0');
   assert.equal(capabilities.api_protocol, 2);

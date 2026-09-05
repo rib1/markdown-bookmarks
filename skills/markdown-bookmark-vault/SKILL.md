@@ -15,10 +15,10 @@ relate, review, or update their Markdown bookmark vault.
 - Treat the vault’s Markdown files as the source of truth.
 - Preserve stable `id` values, URLs, timestamps, notes, and existing metadata.
 - Never move files solely to represent categories; use metadata instead.
-- Keep `contexts`, `areas`, `projects`, `events`, and `tags` distinct:
+- Keep `contexts`, `areas`, `projects`, `events`, and lowercase `tags` distinct:
   contexts describe life context, areas are ongoing responsibilities, projects
   are temporary goals, events are time-bound occasions, and tags describe
-  subject matter.
+  subject matter. Deduplicate tags case-insensitively.
 - Use existing project/event IDs when linking bookmarks. Do not create duplicate
   entities because names differ slightly.
 - Preserve the source and confidence of extracted publication dates.
