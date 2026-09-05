@@ -148,13 +148,13 @@ The CLI must support:
 init [--path PATH] [--no-skill]
 skill install [--path PATH]
 save --url URL [--title TITLE] [--tags tag1,tag2]
-find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--browser] [--with BROWSER] [--dry-run]
-open QUERY [--pick NUMBER] [--with BROWSER] [--dry-run]
+find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--browser] [--with BROWSER] [--dry-run]
+open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]
 ```
 
 All npm examples must include the argument separator:
 `npm run bookmark -- COMMAND`. Without `--`, npm may consume CLI options such
-as `--browser` instead of forwarding them.
+as `--browser` or `--fuzzy` instead of forwarding them.
 
 `find` returns file path, URL, and full Markdown content. With `--browser`, it
 creates a static, safely escaped HTML page in the vault's ignored
@@ -162,6 +162,13 @@ creates a static, safely escaped HTML page in the vault's ignored
 opening it; Docker prints the corresponding host-side `file://` URL.
 Server startup removes generated pages older than 24 hours. `--dry-run` prints
 the page URL without launching it.
+
+Exact case-insensitive substring matching remains the default. `--fuzzy` uses
+the dependency-free matcher in `src/fuzzy-search.js`: Unicode normalization,
+token comparison, adjacent-transposition-aware edit distance, strict thresholds
+for short terms, weighted metadata/body fields, and deterministic score ordering.
+Every query token must qualify. Exact hits rank before fuzzy hits, and the same
+ranking must feed text output, generated browser pages, and `open --pick`.
 
 `open` validates HTTP/HTTPS URLs before launching the platform default browser.
 A unique match opens directly; multiple matches are sorted by title and shown

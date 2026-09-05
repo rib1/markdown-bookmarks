@@ -252,6 +252,34 @@ test('filters bookmark search by saved time', async () => {
   assert.equal((await findBookmarks('amiga', root, { savedWithin: 'year' })).length, 1);
 });
 
+test('fuzzy search finds typos, ranks exact matches first, and keeps time filters', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-fuzzy-'));
+  await saveBookmark({
+    id: 'tripper-guide',
+    url: 'https://example.test/guide',
+    title: 'Tripper travel guide',
+    tags: ['itinerary'],
+    saved_at: '2020-01-01T00:00:00.000Z'
+  }, root);
+  await saveBookmark({ id: 'exact-amiga', url: 'https://example.test/one', title: 'Amiga reference' }, root);
+  await saveBookmark({ id: 'typo-amgia', url: 'https://example.test/two', title: 'Amgia notes' }, root);
+
+  assert.equal((await findBookmarks('triper', root)).length, 0);
+  const typoMatches = await findBookmarks('triper', root, { fuzzy: true });
+  assert.equal(typoMatches.length, 1);
+  assert.equal(typoMatches[0].matchType, 'fuzzy');
+  assert.ok(typoMatches[0].matchScore < 1);
+  assert.deepEqual(typoMatches[0].matchedFields, ['title']);
+  assert.equal((await findBookmarks('triper', root, { fuzzy: true, savedSince: '2025-01-01' })).length, 0);
+
+  const ranked = await findBookmarks('amiga', root, { fuzzy: true });
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].matchType, 'exact');
+  assert.match(ranked[0].content, /title: "Amiga reference"/);
+  assert.equal(ranked[1].matchType, 'fuzzy');
+  assert.match(ranked[1].content, /title: "Amgia notes"/);
+});
+
 test('stores non-LLM page metadata and context', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-metadata-'));
   const saved = await saveBookmark({

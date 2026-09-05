@@ -194,7 +194,7 @@ npm run bookmark -- help
 ```
 
 The `--` after `bookmark` is required for npm commands. It tells npm to forward
-following options such as `--browser`, `--pick`, `--with`, and `--dry-run` to
+following options such as `--browser`, `--fuzzy`, `--pick`, `--with`, and `--dry-run` to
 the bookmark CLI. Without it, npm may consume an option; for example,
 `npm run bookmark find amiga --browser` performs a plain text search. Use:
 
@@ -233,6 +233,27 @@ and run:
 
 ```powershell
 npm run bookmark -- find database
+```
+
+Exact substring matching is the default. For typo-tolerant ranked results, add
+`--fuzzy`:
+
+```powershell
+npm run bookmark -- find triper --fuzzy
+```
+
+Fuzzy matching normalizes case, punctuation, and Unicode, then compares query
+tokens with bookmark fields using transposition-aware edit distance. Titles,
+IDs, tags, contexts, and site identifiers rank above URLs and Markdown body
+text. Every query token must meet a strict similarity threshold, and very short
+terms are not broadened. Exact matches always rank before fuzzy matches. Text
+results show the score and strongest matching fields.
+
+The same ordering is used when opening one result or generating a browser page:
+
+```powershell
+npm run bookmark -- open triper --fuzzy
+npm run bookmark -- find triper --fuzzy --browser
 ```
 
 To view useful metadata for all matches in a temporary browser page, use:

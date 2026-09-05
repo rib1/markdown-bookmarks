@@ -16,6 +16,8 @@ import {
   migrateVault
 } from './migrations/index.js';
 import { applySitePlugins } from './site-plugins/index.js';
+import { fuzzyBookmarkMatch } from './fuzzy-search.js';
+import { sortSearchResults } from './search-result-order.js';
 import { vaultRoot } from './vault-path.js';
 
 export { vaultRoot } from './vault-path.js';
@@ -150,7 +152,7 @@ function savedAfter(content, cutoff) {
   return savedAt && !Number.isNaN(Date.parse(savedAt)) && Date.parse(savedAt) >= cutoff;
 }
 
-export async function findBookmarks(query, root = vaultRoot(), { savedWithin, savedSince } = {}) {
+export async function findBookmarks(query, root = vaultRoot(), { savedWithin, savedSince, fuzzy = false } = {}) {
   const base = path.join(root, 'bookmarks');
   const results = [];
   const durations = { day: 1, week: 7, month: 30, year: 365 };
@@ -165,12 +167,25 @@ export async function findBookmarks(query, root = vaultRoot(), { savedWithin, sa
       if (entry.isDirectory()) await walk(target);
       else if (entry.name.endsWith('.md')) {
         const content = await fs.readFile(target, 'utf8');
-        if (content.toLowerCase().includes(query.toLowerCase()) && (cutoff === undefined || savedAfter(content, cutoff))) {
-          results.push({ file: target, content });
+        if (cutoff !== undefined && !savedAfter(content, cutoff)) continue;
+        if (content.toLowerCase().includes(query.toLowerCase())) {
+          results.push(fuzzy
+            ? { file: target, content, matchType: 'exact', matchScore: 1, matchedFields: ['content'] }
+            : { file: target, content });
+          continue;
         }
+        if (!fuzzy) continue;
+        const match = fuzzyBookmarkMatch(query, content);
+        if (match) results.push({
+          file: target,
+          content,
+          matchType: 'fuzzy',
+          matchScore: match.score,
+          matchedFields: match.fields
+        });
       }
     }
   }
   await walk(base);
-  return results;
+  return fuzzy ? sortSearchResults(results) : results;
 }

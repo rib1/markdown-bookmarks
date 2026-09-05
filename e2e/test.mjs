@@ -88,10 +88,10 @@ try {
     saved_at: '2026-09-05T11:00:00.000Z'
   }, searchVault);
   const searchEnv = { ...process.env, BOOKMARK_VAULT: searchVault };
-  delete searchEnv.BOOKMARK_RESULTS_BASE_URL;
+  delete searchEnv.BOOKMARK_RESULTS_HOST_VAULT;
   delete searchEnv.BOOKMARK_RESULTS_DIR;
   const generated = await exec('node',
-    ['src/cli.js', 'find', 'page-e2e', '--browser', '--dry-run'],
+    ['src/cli.js', 'find', 'pgae-e2e', '--fuzzy', '--browser', '--dry-run'],
     { cwd: '/e2e', env: searchEnv });
   const resultPageUrl = generated.stdout.trim();
   assert.equal(path.dirname(fileURLToPath(resultPageUrl)),
@@ -101,6 +101,7 @@ try {
   await resultPage.goto(resultPageUrl);
   await expect(resultPage.getByRole('heading', { name: 'Bookmark search results' })).toBeVisible();
   await expect(resultPage.locator('article.result')).toHaveCount(2);
+  await expect(resultPage.getByText(/Fuzzy \d+% · tags/)).toHaveCount(2);
   await expect(resultPage.locator('article.result').first().getByRole('heading')).toHaveText('Alpha result');
   await expect(resultPage.getByText('travel', { exact: true })).toBeVisible();
   await expect(resultPage.getByText('reference', { exact: true })).toBeVisible();

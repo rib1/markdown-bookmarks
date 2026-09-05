@@ -2,31 +2,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { readList, readScalar } from './bookmark-format.js';
+import { readList } from './bookmark-format.js';
+import { metadataValue, sortSearchResults } from './search-result-order.js';
 import { vaultRoot } from './vault-path.js';
 
 export const SEARCH_RESULTS_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const SEARCH_RESULTS_CSP = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; object-src 'none'";
 
 const resultFilePattern = /^search-results-([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.html$/i;
-
-function compareText(left, right) {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-export function metadataValue(content, field) {
-  return readScalar(content, field);
-}
-
-export function sortSearchResults(results) {
-  return [...results].sort((left, right) => {
-    const leftTitle = String(metadataValue(left.content, 'title') || left.file);
-    const rightTitle = String(metadataValue(right.content, 'title') || right.file);
-    return compareText(leftTitle.toLowerCase(), rightTitle.toLowerCase())
-      || compareText(leftTitle, rightTitle)
-      || compareText(left.file, right.file);
-  });
-}
 
 function escapeHtml(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;')
@@ -58,11 +41,17 @@ function resultCard(result) {
   const openLink = parsedUrl
     ? `<a class="open-link" href="${escapeHtml(parsedUrl.href)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeHtml(title)}">Open</a>`
     : '<span class="open-link disabled" aria-disabled="true">Unavailable</span>';
+  const matchDetails = result.matchType
+    ? `<div class="metadata"><strong>Match:</strong> ${escapeHtml(result.matchType === 'exact' ? 'Exact' : 'Fuzzy')}`
+      + ` ${Math.round(result.matchScore * 100)}%${result.matchedFields?.length
+        ? ` · ${escapeHtml(result.matchedFields.join(', '))}` : ''}</div>`
+    : '';
   return `<article class="result">
     <div class="result-heading"><div><h2>${escapeHtml(title)}</h2><span class="host">${escapeHtml(parsedUrl?.host || 'Invalid URL')}</span></div>${openLink}</div>
     <div class="url">${escapeHtml(rawUrl || '(missing URL)')}</div>
     ${chips('Tags', tags)}
     ${chips('Contexts', contexts)}
+    ${matchDetails}
     ${savedAt ? `<div class="metadata"><strong>Saved:</strong> ${escapeHtml(savedAt)}</div>` : ''}
   </article>`;
 }

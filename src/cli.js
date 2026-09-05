@@ -4,10 +4,9 @@ import { createInterface } from 'node:readline/promises';
 import { openInBrowser } from './browser-launcher.js';
 import {
   createSearchResultsPage,
-  hostSearchResultsFileUrl,
-  metadataValue,
-  sortSearchResults
+  hostSearchResultsFileUrl
 } from './search-results-page.js';
+import { metadataValue, sortSearchResults } from './search-result-order.js';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -35,6 +34,10 @@ function positionalArgument(valueOptions = []) {
 function printSearchResult(result) {
   console.log(`FILE: ${result.file}`);
   console.log(`URL: ${metadataValue(result.content, 'url') || '(missing)'}`);
+  if (result.matchType) {
+    const fields = result.matchedFields?.length ? ` (${result.matchedFields.join(', ')})` : '';
+    console.log(`MATCH: ${result.matchType} ${Math.round(result.matchScore * 100)}%${fields}`);
+  }
   console.log(result.content);
   console.log('---');
 }
@@ -78,6 +81,7 @@ below to this CLI.
 
 Options:
   --pick NUMBER     Skip the menu and directly open a numbered search result.
+  --fuzzy           Use typo-tolerant ranked matching instead of exact-only matching.
   --with BROWSER   Use a browser alias, application name, executable, or executable path.
   --dry-run         Print the selected URL without launching a browser.
   --help, -h        Show this help.
@@ -90,6 +94,7 @@ Multiple matches:
   Without --pick, an interactive terminal displays a numbered menu and asks
   you to choose. With --pick NUMBER, that menu is skipped and the numbered
   match for the current query opens directly. --pick=NUMBER is also accepted.
+  With --fuzzy, numbering follows match score; exact matches rank first.
 
 Launch failures:
   If the selected browser is missing or cannot start, the command prints the
@@ -100,6 +105,7 @@ Examples:
   npm run bookmark -- open database --pick 2
   npm run bookmark -- open database --with firefox
   npm run bookmark -- open database --with "Google Chrome"
+  npm run bookmark -- open triper --fuzzy
   npm run bookmark -- open database --dry-run
 
 Open a bookmark by its stable ID:
@@ -127,17 +133,18 @@ function printHelp() {
   init [--path PATH] [--no-skill]
   skill install [--path PATH]
   save --url URL [--title TITLE] [--tags tag1,tag2]
-  find QUERY [--saved-within PERIOD] [--saved-since DATE] [--browser] [--with BROWSER] [--dry-run]
-  open QUERY [--pick NUMBER] [--with BROWSER] [--dry-run]
+  find QUERY [--saved-within PERIOD] [--saved-since DATE] [--fuzzy] [--browser] [--with BROWSER] [--dry-run]
+  open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]
 
 npm syntax:
   Keep the "--" in "npm run bookmark -- COMMAND". It forwards options such as
-  --browser, --pick, --with, and --dry-run to the bookmark CLI.
+  --browser, --fuzzy, --pick, --with, and --dry-run to the bookmark CLI.
 
 Common workflows:
   npm run bookmark -- find database
   npm run bookmark -- open database --pick 3
   npm run bookmark -- open database --pick 3 --with firefox
+  npm run bookmark -- find triper --fuzzy
   npm run bookmark -- find database --browser --with chrome
 
 Run "npm run bookmark -- open --help" for launch options and browser details.`);
@@ -190,11 +197,16 @@ if (command === 'help' || command === '--help' || command === '-h') {
   const query = positionalArgument(['--saved-within', '--saved-since', '--with']);
   if (!query) throw new Error('Usage: npm run bookmark -- find QUERY');
   const selectedBrowser = option('--with');
+  const fuzzy = args.includes('--fuzzy');
   if (args.includes('--with') && (!selectedBrowser || selectedBrowser.startsWith('-'))) {
     throw new Error('--with requires a browser name or executable');
   }
   if (selectedBrowser && !args.includes('--browser')) throw new Error('--with requires find --browser');
-  const results = await findBookmarks(query, undefined, { savedWithin: option('--saved-within'), savedSince: option('--saved-since') });
+  const results = await findBookmarks(query, undefined, {
+    savedWithin: option('--saved-within'),
+    savedSince: option('--saved-since'),
+    fuzzy
+  });
   if (!results.length) {
     console.log(`No bookmarks found for: ${query}`);
   } else if (args.includes('--browser')) {
@@ -219,12 +231,13 @@ if (command === 'help' || command === '--help' || command === '-h') {
   } else {
     const query = positionalArgument(['--pick', '--with']);
     const dryRun = args.includes('--dry-run');
+    const fuzzy = args.includes('--fuzzy');
     const selectedBrowser = option('--with');
     if (args.includes('--with') && (!selectedBrowser || selectedBrowser.startsWith('-'))) {
       throw new Error('--with requires a browser name or executable');
     }
-    if (!query) throw new Error('Usage: npm run bookmark -- open QUERY [--pick NUMBER] [--with BROWSER] [--dry-run]');
-    const result = await chooseOpenResult(await findBookmarks(query), option('--pick'));
+    if (!query) throw new Error('Usage: npm run bookmark -- open QUERY [--pick NUMBER] [--fuzzy] [--with BROWSER] [--dry-run]');
+    const result = await chooseOpenResult(await findBookmarks(query, undefined, { fuzzy }), option('--pick'));
     if (!result) throw new Error(`No bookmark found for: ${query}`);
     const url = result.content.match(/^url:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
     if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Bookmark has no safe HTTP URL: ${result.file}`);
