@@ -50,7 +50,7 @@ test('initializes a vault and installs the LLM skill without overwriting README'
     const vaultAgents = path.join(root, 'AGENTS.md');
     const skill = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
     assert.equal(await fs.readFile(attributes, 'utf8'), '* text=auto eol=lf\n');
-    assert.equal(await fs.readFile(ignore, 'utf8'), '.DS_Store\n');
+    assert.equal(await fs.readFile(ignore, 'utf8'), '.DS_Store\n/views/.search-results/\n');
     assert.deepEqual(JSON.parse(await fs.readFile(schema, 'utf8')), { schema_version: BOOKMARK_SCHEMA_VERSION });
     const readmeContent = await fs.readFile(readme, 'utf8');
     assert.match(readmeContent, /# Private bookmark vault/);
@@ -123,7 +123,8 @@ Legacy data.
   assert.doesNotMatch(migrated, /first_opened_at:|last_opened_at:|access_count:/);
   assert.deepEqual(metadataList(migrated, 'tags'), ['reference', 'work']);
   assert.deepEqual(metadataList(migrated, 'contexts'), ['work']);
-  assert.equal(await fs.readFile(path.join(root, '.gitignore'), 'utf8'), 'local-cache/\n.DS_Store\n');
+  assert.equal(await fs.readFile(path.join(root, '.gitignore'), 'utf8'),
+    'local-cache/\n.DS_Store\n/views/.search-results/\n');
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(root, '.markdown-bookmarks.json'), 'utf8')),
     { schema_version: BOOKMARK_SCHEMA_VERSION });
   const second = await migrateVault(root);

@@ -16,10 +16,9 @@ import {
   migrateVault
 } from './migrations/index.js';
 import { applySitePlugins } from './site-plugins.js';
+import { vaultRoot } from './vault-path.js';
 
-export function vaultRoot() {
-  return process.env.BOOKMARK_VAULT || process.env.VAULT_PATH || path.resolve('vault');
-}
+export { vaultRoot } from './vault-path.js';
 
 export async function installVaultSkill(root) {
   const source = process.env.SKILL_SOURCE || path.resolve('skills', 'markdown-bookmark-vault', 'SKILL.md');

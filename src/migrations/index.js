@@ -9,6 +9,7 @@ export const BOOKMARK_SCHEMA_VERSION = 1;
 export const VAULT_SCHEMA_FILE = '.markdown-bookmarks.json';
 
 const BOOKMARK_MIGRATIONS = [schemaVersion1];
+const VAULT_GITIGNORE_RULES = ['.DS_Store', '/views/.search-results/'];
 
 async function writeAtomic(file, content) {
   const temporary = `${file}.migration-${process.pid}-${crypto.randomUUID()}.tmp`;
@@ -29,10 +30,13 @@ async function ensureVaultGitignore(root) {
   try { content = await fs.readFile(file, 'utf8'); } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
-  if (content.split(/\r?\n/).includes('.DS_Store')) return false;
+  const existingRules = new Set(content.split(/\r?\n/));
+  const missingRules = VAULT_GITIGNORE_RULES.filter((rule) => !existingRules.has(rule));
+  if (!missingRules.length) return false;
   const separator = content && !content.endsWith('\n') ? '\n' : '';
-  if (content) await writeAtomic(file, `${content}${separator}.DS_Store\n`);
-  else await fs.writeFile(file, '.DS_Store\n', 'utf8');
+  const updated = `${content}${separator}${missingRules.join('\n')}\n`;
+  if (content) await writeAtomic(file, updated);
+  else await fs.writeFile(file, updated, 'utf8');
   return true;
 }
 

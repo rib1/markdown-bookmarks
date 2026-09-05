@@ -1,10 +1,12 @@
 import http from 'node:http';
 import { migrateVault } from './migrations/index.js';
+import { cleanupStaleSearchResultPages } from './search-results-page.js';
 import { saveBookmark, vaultRoot } from './vault.js';
 
 const port = Number(process.env.PORT || 8787);
 const vault = vaultRoot();
 const migration = await migrateVault(vault);
+const purgedSearchPages = await cleanupStaleSearchResultPages();
 
 function send(response, status, body) {
   response.writeHead(status, {
@@ -39,6 +41,7 @@ server.listen(port, '0.0.0.0', () => {
   console.log([
     ...migrationLog,
     `vault AGENTS.md: ${migration.agentInstructions}`,
+    `stale search-result pages purged: ${purgedSearchPages}`,
     `bookmark companion listening on ${port}; vault: ${vault}; schema: ${migration.schemaVersion}; migrated: ${migration.migrated}`
   ].join('\n'));
 });

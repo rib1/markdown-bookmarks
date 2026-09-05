@@ -48,6 +48,7 @@ the CLI.
 - Prefer standard-library implementations until a dependency is justified.
 - Do not add a web UI or hosted backend unless the project plan changes.
 - Treat browser input as untrusted data; validate URLs and safely serialize Markdown/YAML values.
+- Treat generated browser-search HTML as private disposable output: escape all values, allow only validated HTTP/HTTPS links, store it under the vault's ignored `views/.search-results/`, and purge stale pages at startup.
 - Do not silently enable Git push or remote network access.
 
 ## Verification

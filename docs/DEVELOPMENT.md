@@ -44,6 +44,7 @@ private-vault/
 ├── events/<stable-id>-<slug>.md
 ├── assets/<bookmark-id>/
 ├── views/                         # generated and disposable
+│   └── .search-results/           # temporary, Git-ignored HTML result pages
 └── .codex/skills/markdown-bookmark-vault/SKILL.md
 ```
 
@@ -104,7 +105,8 @@ renames `first_opened_at`, `last_opened_at`, and `access_count` to their `saved`
 equivalents, and removes save-history values accidentally copied into `tags`.
 Context values that also appear as tags are retained because they may be
 intentional. Vault initialization and migration also ignore macOS `.DS_Store`
-files without replacing existing `.gitignore` rules.
+files and `views/.search-results/` without replacing existing `.gitignore`
+rules.
 
 Every migration/startup pass also synchronizes `templates/vault/AGENTS.md` to
 the vault root, including when the schema is already current. This keeps agents
@@ -145,13 +147,26 @@ The CLI must support:
 init [--path PATH] [--no-skill]
 skill install [--path PATH]
 save --url URL [--title TITLE] [--tags tag1,tag2]
-find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD]
-open QUERY [--dry-run]
+find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--browser] [--with BROWSER] [--dry-run]
+open QUERY [--pick NUMBER] [--with BROWSER] [--dry-run]
 ```
 
-`find` returns file path, URL, and full Markdown content. `open` validates
-HTTP/HTTPS URLs before launching the platform default browser. `--dry-run`
-prints the resolved URL without launching a browser.
+`find` returns file path, URL, and full Markdown content. With `--browser`, it
+creates a static, safely escaped HTML page in the vault's ignored
+`views/.search-results/` directory. Native mode opens its `file://` URL and
+prints the link; Docker prints the corresponding host-side `file://` URL.
+Server startup removes generated pages older than 24 hours. `--dry-run` prints
+the page URL without launching it.
+
+`open` validates HTTP/HTTPS URLs before launching the platform default browser.
+A unique match opens directly; multiple matches are sorted by title and shown
+as numbered choices. Interactive terminals prompt for a number, while
+non-interactive use requires `--pick NUMBER`. `--with BROWSER` selects a known
+browser alias or an explicit application/executable in native mode. Its
+`--dry-run` prints the resolved bookmark URL without launching a browser.
+`open --help` documents every launch option and gives linked search/open
+workflow examples. Docker cannot launch host applications, so it prints the
+selected URL instead.
 
 Vault configuration must be consistent between server and CLI:
 
@@ -193,9 +208,10 @@ The `Quality` workflow runs ESLint and the complete test suite on every push and
 pull request. The `Credential scan` workflow runs Gitleaks on the same events.
 
 Tests must cover vault initialization, skill installation, CLI commands and
-path resolution, save/find/open behavior, duplicate merging, time filters,
-GitHub/YouTube/Mural plugins, legacy enrichment, Chrome capture, and Markdown
-content. E2E tests must use ignored isolated test data, never the private vault.
+path resolution, save/find/open behavior, temporary search-page safety and
+cleanup, duplicate merging, time filters, GitHub/YouTube/Mural plugins, legacy
+enrichment, Chrome capture, and Markdown content. E2E tests must use ignored
+isolated test data, never the private vault.
 
 ## Release requirements
 

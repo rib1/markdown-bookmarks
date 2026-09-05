@@ -10,6 +10,8 @@ services:
       - "127.0.0.1:8787:8787"
     environment:
       VAULT_PATH: /vault
+      BOOKMARK_RESULTS_DIR: /vault/views/.search-results
+      BOOKMARK_RESULTS_HOST_VAULT: ${BOOKMARK_VAULT:-${PWD}/vault}
       PORT: 8787
     volumes:
       - ${BOOKMARK_VAULT:-./vault}:/vault

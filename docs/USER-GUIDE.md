@@ -184,6 +184,29 @@ bookmarks are classified as videos and always receive the `youtube` tag.
 Mural bookmarks are classified as whiteboards and default to the `work`
 context.
 
+## Command help
+
+The CLI includes a compact command reference plus workflow examples. Show the
+full command list with:
+
+```powershell
+npm run bookmark -- help
+```
+
+This lists initialization, saving, searching, browser-page generation, and
+link-opening commands. Its examples show how to search first, open a numbered
+result, choose another browser, or open all matches as a browser page.
+
+For the detailed link-launch reference, run:
+
+```powershell
+npm run bookmark -- open --help
+```
+
+The detailed help explains `--pick`, `--with`, `--dry-run`, supported browser
+aliases, custom application/executable values, platform behavior, and the fact
+that Docker cannot launch applications on the host.
+
 ## Search from the CLI
 
 With the Docker companion running:
@@ -202,15 +225,50 @@ and run:
 npm run bookmark -- find database
 ```
 
-Open the first matching bookmark in the host's default browser:
+To view useful metadata for all matches in a temporary browser page, use:
 
 ```powershell
-docker compose exec bookmarkd node src/cli.js open database
+npm run bookmark -- find database --browser
 ```
 
-For the npm workflow, use `npm run bookmark -- open database` instead.
+Native mode opens the page directly and also prints its `file://` link. With
+Docker, keep `bookmarkd` running and run:
 
-Use `open QUERY --dry-run` to print the URL without launching a browser.
+```powershell
+docker compose exec bookmarkd node src/cli.js find database --browser
+```
+
+Docker prints the generated file's host-side `file://` link for the browser.
+Set `BOOKMARK_VAULT` to an absolute host path before starting Compose so that
+this link can be constructed reliably. Both modes store the generated HTML
+under the private vault's Git-ignored `views/.search-results/` directory. The
+page contains private result metadata, loads no external assets, and is never a
+source record. Server startup deletes generated pages older than 24 hours. Add
+`--dry-run` to generate and print the page URL without opening it.
+
+Open a matching bookmark in the default browser with the native npm workflow:
+
+```powershell
+npm run bookmark -- open database
+```
+
+Select another browser with `--with`. Built-in aliases are `chrome`, `edge`,
+`firefox`, `brave`, and `safari` on macOS:
+
+```powershell
+npm run bookmark -- open database --with firefox
+```
+
+You can also give a macOS application name or a Windows/Linux executable name
+or path. Browser launching is available only in the native npm workflow;
+Docker cannot launch applications on the host.
+
+If several bookmarks match, `open` shows a numbered list and asks which one to
+open. Enter a short number such as `2`; there is no need to type the bookmark
+ID. For scripts or other non-interactive use, select the same numbered result
+with `open QUERY --pick 2`. Results are sorted by title so the numbering is
+stable. Use `open QUERY --dry-run` to print the selected URL without launching
+a browser.
 
 ## Version the private vault
 

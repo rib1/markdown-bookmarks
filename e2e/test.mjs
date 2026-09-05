@@ -3,7 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { chromium, expect } from '@playwright/test';
+import { saveBookmark } from './src/vault.js';
 
 const exec = promisify(execFile);
 // The vault is a Docker volume so the test can inspect files written by the service.
@@ -15,6 +17,7 @@ const browser = await chromium.launchPersistentContext('/tmp/bookmark-chrome-pro
   headless: false,
   args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
 });
+let searchVault;
 
 try {
   // Create a deterministic page that represents the active browser tab.
@@ -67,7 +70,56 @@ try {
   const found = await exec('node', ['src/cli.js', 'find', testUrl], { cwd: '/e2e', env: { ...process.env, BOOKMARK_VAULT: vault } });
   assert.match(found.stdout, new RegExp(`URL: ${testUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(found.stdout, /- "duplicate"/);
+
+  console.log('testing generated browser search page');
+  searchVault = await fs.mkdtemp('/tmp/markdown-bookmarks-search-page-');
+  await saveBookmark({
+    url: 'https://example.test/result-alpha',
+    title: 'Alpha result',
+    tags: ['page-e2e', 'reference'],
+    contexts: ['travel'],
+    saved_at: '2026-09-05T10:00:00.000Z'
+  }, searchVault);
+  await saveBookmark({
+    url: 'https://example.test/result-beta',
+    title: 'Beta <img src=x onerror=alert(1)>',
+    tags: ['page-e2e'],
+    contexts: ['personal'],
+    saved_at: '2026-09-05T11:00:00.000Z'
+  }, searchVault);
+  const searchEnv = { ...process.env, BOOKMARK_VAULT: searchVault };
+  delete searchEnv.BOOKMARK_RESULTS_BASE_URL;
+  delete searchEnv.BOOKMARK_RESULTS_DIR;
+  const generated = await exec('node',
+    ['src/cli.js', 'find', 'page-e2e', '--browser', '--dry-run'],
+    { cwd: '/e2e', env: searchEnv });
+  const resultPageUrl = generated.stdout.trim();
+  assert.equal(path.dirname(fileURLToPath(resultPageUrl)),
+    path.join(searchVault, 'views', '.search-results'));
+
+  const resultPage = await browser.newPage();
+  await resultPage.goto(resultPageUrl);
+  await expect(resultPage.getByRole('heading', { name: 'Bookmark search results' })).toBeVisible();
+  await expect(resultPage.locator('article.result')).toHaveCount(2);
+  await expect(resultPage.locator('article.result').first().getByRole('heading')).toHaveText('Alpha result');
+  await expect(resultPage.getByText('travel', { exact: true })).toBeVisible();
+  await expect(resultPage.getByText('reference', { exact: true })).toBeVisible();
+  await expect(resultPage.getByText('Beta <img src=x onerror=alert(1)>', { exact: true })).toBeVisible();
+  assert.equal(await resultPage.locator('img, script').count(), 0);
+
+  await browser.route('https://example.test/result-alpha', (route) => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<title>Selected bookmark</title><h1>Selected bookmark</h1>'
+  }));
+  const selectedPagePromise = resultPage.waitForEvent('popup');
+  await resultPage.getByRole('link', { name: 'Open Alpha result' }).click();
+  const selectedPage = await selectedPagePromise;
+  await selectedPage.waitForLoadState();
+  assert.equal(selectedPage.url(), 'https://example.test/result-alpha');
+  await expect(selectedPage.getByRole('heading', { name: 'Selected bookmark' })).toBeVisible();
   console.log(`E2E passed: ${file}`);
 } finally {
+  if (searchVault) await fs.rm(searchVault, { recursive: true, force: true });
   await browser.close();
 }

@@ -24,7 +24,14 @@ test('HTTP server prefers BOOKMARK_VAULT over VAULT_PATH', async (t) => {
   const port = await availablePort();
   const legacyDirectory = path.join(bookmarkVault, 'bookmarks', '2026', '09');
   const legacyFile = path.join(legacyDirectory, 'legacy.md');
+  const resultsDirectory = path.join(bookmarkVault, 'views', '.search-results');
+  const staleResult = path.join(resultsDirectory,
+    'search-results-00000000-0000-4000-8000-000000000000.html');
   await fs.mkdir(legacyDirectory, { recursive: true });
+  await fs.mkdir(resultsDirectory, { recursive: true });
+  await fs.writeFile(staleResult, '<html>stale</html>', 'utf8');
+  const staleDate = new Date(Date.now() - 25 * 60 * 60 * 1000);
+  await fs.utimes(staleResult, staleDate, staleDate);
   await fs.writeFile(legacyFile, `---
 id: legacy-server
 url: "https://example.test/server-legacy"
@@ -45,6 +52,7 @@ access_count: 1
     env: {
       ...process.env,
       BOOKMARK_VAULT: bookmarkVault,
+      BOOKMARK_RESULTS_DIR: resultsDirectory,
       VAULT_PATH: vaultPath,
       PORT: String(port)
     },
@@ -68,7 +76,9 @@ access_count: 1
   assert.match(message, new RegExp(`vault: ${bookmarkVault.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(message, /vault migration ran: 001-bookmark-schema-v1\.js; schema: 0 -> 1/);
   assert.match(message, /vault AGENTS\.md: installed/);
+  assert.match(message, /stale search-result pages purged: 1/);
   assert.match(message, /schema: 1; migrated: 1/);
+  await assert.rejects(() => fs.access(staleResult), { code: 'ENOENT' });
   const migratedLegacy = await fs.readFile(legacyFile, 'utf8');
   assert.match(migratedLegacy, /schema_version: 1/);
   assert.match(migratedLegacy, /save_count: 1/);
