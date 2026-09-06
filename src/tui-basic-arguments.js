@@ -1,9 +1,5 @@
 import { argumentError, parseTuiArguments } from './tui-arguments.js';
 
-const initOptions = {
-  '--path': { key: 'path', type: 'value', valueLabel: 'a vault path' },
-  '--no-skill': { key: 'noSkill', type: 'boolean' }
-};
 const saveOptions = {
   '--url': { key: 'url', type: 'value', valueLabel: 'a URL' },
   '--title': { key: 'title', type: 'value', valueLabel: 'a title' },
@@ -14,10 +10,6 @@ const saveOptions = {
 const skillOptions = {
   '--path': { key: 'path', type: 'value', valueLabel: 'a vault path' }
 };
-
-export function parseInitArguments(args) {
-  return parseTuiArguments(args, { options: initOptions });
-}
 
 export function parseSaveArguments(args) {
   const parsed = parseTuiArguments(args, { options: saveOptions });

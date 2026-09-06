@@ -42,14 +42,14 @@ You can also initialize the directory with the companion:
 
 ```bash
 export BOOKMARK_VAULT="$HOME/Documents/my-bookmarks"
-docker compose run --rm bookmarkd node src/cli.js init
+docker compose run --rm bookmarkd node src/cli.js vault init
 ```
 
 On Windows PowerShell, set the host path before running Docker:
 
 ```powershell
 $env:BOOKMARK_VAULT = "$HOME\Documents\my-bookmarks"
-docker compose run --rm bookmarkd node src/cli.js init
+docker compose run --rm bookmarkd node src/cli.js vault init
 ```
 
 The command creates the standard vault directories, a README, and a
@@ -119,7 +119,7 @@ Windows PowerShell:
 
 ```powershell
 $env:BOOKMARK_VAULT = 'C:\Users\YOUR-NAME\Documents\my-bookmarks'
-npm run bookmark -- init
+npm run bookmark -- vault init
 npm start
 ```
 
@@ -127,7 +127,7 @@ macOS:
 
 ```bash
 export BOOKMARK_VAULT="$HOME/Documents/my-bookmarks"
-npm run bookmark -- init
+npm run bookmark -- vault init
 npm start
 ```
 
@@ -255,7 +255,7 @@ arguments:
 ```powershell
 npm run bookmark -- find --help
 npm run bookmark -- save --help
-npm run bookmark -- init --help
+npm run bookmark -- vault init --help
 ```
 
 The TUI rejects unknown, unsupported, duplicate, or conflicting options instead
@@ -445,6 +445,8 @@ npm run bookmark -- vault git-help --full
 
 The help command does not run Git or access the network. Review vault changes,
 pull before saving on another machine, and commit and push explicitly.
+If the selected vault is not initialized, help tells you to run `vault init`
+first.
 
 Open the vault in Finder, File Explorer, or the Linux file manager with:
 
@@ -454,7 +456,8 @@ npm run bookmark -- vault open
 
 Use `--dry-run` to print the native command without opening anything. In
 Docker, the command prints a host-side command because a container cannot open
-the host file manager.
+the host file manager. An uninitialized vault is not opened; the TUI prints the
+initialization command instead.
 
 ## Run the browser end-to-end test
 

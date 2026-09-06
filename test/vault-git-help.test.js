@@ -26,3 +26,9 @@ test('keeps injected vault paths on one output line', () => {
   assert.doesNotMatch(output, /Vault: \/vault\n/);
   assert.match(output, /Vault: \/vault misleading command/);
 });
+
+test('puts initialization first when no vault is present', () => {
+  const output = renderVaultGitHelp('/new-vault', { initialized: false });
+  assert.match(output, /^No initialized bookmark vault was found\. First run:/);
+  assert.match(output, /npm run bookmark -- vault init/);
+});

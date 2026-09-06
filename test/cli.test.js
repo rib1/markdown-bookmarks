@@ -53,6 +53,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /--saved-within day\|week\|month\|year/);
   assert.match(generalHelp.stdout, /--saved-since YYYY-MM-DD/);
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
+  assert.match(generalHelp.stdout, /vault init \[--path PATH\] \[--no-skill\]/);
   assert.match(generalHelp.stdout, /vault git-help \[--full\]/);
   assert.match(generalHelp.stdout, /vault open \[--dry-run\]/);
   assert.match(generalHelp.stdout, /find \[QUERY\] .*--fuzzy.*--browser/);
@@ -120,7 +121,7 @@ test('TUI help wins consistently and argument errors are concise', async () => {
     [['find', 'alpha', '--wat', '--help'], /Usage: npm run bookmark -- find QUERY/],
     [['open', 'alpha', '--help'], /Find a bookmark and open its HTTP\/HTTPS URL/],
     [['save', '--wat', '--help'], /Save one HTTP\/HTTPS bookmark through the TUI/],
-    [['init', 'unexpected', '-h'], /Initialize the selected private bookmark vault/],
+    [['vault', 'init', 'unexpected', '-h'], /vault init \[--path PATH\] \[--no-skill\]/],
     [['skill', 'unknown', '--help'], /Install or refresh the vault-management LLM skill/],
     [['vault', 'unknown', '--wat', '--help'], /vault git-help \[--full\]/],
     [['help', 'find'], /--saved-since DATE/]
@@ -144,8 +145,8 @@ test('TUI help wins consistently and argument errors are concise', async () => {
     [['find', 'alpha', '--browser', '--expand'], /Use either --expand or --browser/],
     [['open', 'alpha', '--browser'], /Unknown option for this command: --browser/],
     [['save', '--wat'], /Unknown option for this command: --wat/],
-    [['init', 'unexpected'], /Unexpected extra argument/],
-    [['vault'], /Usage: npm run bookmark -- vault git-help/],
+    [['init'], /The init command moved: npm run bookmark -- vault init/],
+    [['vault'], /Usage: npm run bookmark -- vault init/],
     [['vault', 'git-help', '--full', '--full'], /Option may only be provided once/],
     [['vault', 'git-help', '--dry-run'], /--dry-run is only supported by vault open/],
     [['vault', 'open', '--full'], /--full is only supported by vault git-help/],
@@ -167,12 +168,32 @@ test('TUI help wins consistently and argument errors are concise', async () => {
 });
 
 test('vault commands render Git help and safe file-explorer commands', async () => {
-  const root = path.join(os.tmpdir(), 'Bookmark Vault Example');
-  const nativeEnv = { ...process.env, BOOKMARK_VAULT: root };
+  const parent = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-vault-command-'));
+  const root = path.join(parent, 'Bookmark Vault Example');
+  const nativeEnv = {
+    ...process.env,
+    BOOKMARK_VAULT: root,
+    SKILL_SOURCE: path.resolve('skills', 'markdown-bookmark-vault', 'SKILL.md')
+  };
   delete nativeEnv.BOOKMARK_RESULTS_HOST_VAULT;
+
+  const missingVaultHelp = await run(process.execPath, [cli, 'vault', '--help'], { env: nativeEnv });
+  assert.match(missingVaultHelp.stdout, /^No initialized bookmark vault was found at/);
+  assert.match(missingVaultHelp.stdout, /First run: npm run bookmark -- vault init/);
+
+  const missingHelp = await run(process.execPath, [cli, 'vault', 'git-help'], { env: nativeEnv });
+  assert.match(missingHelp.stdout, /^No initialized bookmark vault was found\. First run:/);
+  await assert.rejects(
+    () => run(process.execPath, [cli, 'vault', 'open', '--dry-run'], { env: nativeEnv }),
+    (error) => /First run: npm run bookmark -- vault init/.test(error.stderr)
+  );
+
+  const initialized = await run(process.execPath, [cli, 'vault', 'init'], { env: nativeEnv });
+  assert.match(initialized.stdout, /Vault ready/);
 
   const concise = await run(process.execPath, [cli, 'vault', 'git-help'], { env: nativeEnv });
   assert.match(concise.stdout, new RegExp(`Vault: ${root.replaceAll('\\', '\\\\')}`));
+  assert.doesNotMatch(concise.stdout, /No initialized bookmark vault was found/);
   assert.match(concise.stdout, /status --short/);
   assert.match(concise.stdout, /More help: .*--full/);
   assert.doesNotMatch(concise.stdout, /remote add|rebase --continue/);
@@ -186,7 +207,7 @@ test('vault commands render Git help and safe file-explorer commands', async () 
 
   const dockerEnv = {
     ...nativeEnv,
-    VAULT_PATH: '/vault',
+    VAULT_PATH: root,
     BOOKMARK_RESULTS_HOST_VAULT: 'C:\\Users\\example\\Bookmark Vault'
   };
   delete dockerEnv.BOOKMARK_VAULT;
@@ -270,7 +291,7 @@ test('time-filtered find numbering is reused by open --pick and --with', async (
   assert.equal(within.stdout.trim(), 'https://example.test/timeline-alpha');
 });
 
-test('CLI commands initialize, save, find, install the vault skill, and dry-run open', async () => {
+test('TUI commands initialize, save, find, install the vault skill, and dry-run open', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-cli-'));
   const env = {
     ...process.env,
@@ -279,7 +300,7 @@ test('CLI commands initialize, save, find, install the vault skill, and dry-run 
   };
   delete env.BOOKMARK_RESULTS_HOST_VAULT;
   delete env.BOOKMARK_RESULTS_DIR;
-  const initialized = await run(process.execPath, [cli, 'init', '--path', root], { env });
+  const initialized = await run(process.execPath, [cli, 'vault', 'init', '--path', root], { env });
   assert.match(initialized.stdout, /Vault ready/);
   assert.match(await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8'), /How to search/);
 

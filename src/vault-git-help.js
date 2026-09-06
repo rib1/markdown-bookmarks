@@ -6,10 +6,13 @@ function quotedPath(root) {
   return `"${oneLine(root).replaceAll('"', '\\"')}"`;
 }
 
-export function renderVaultGitHelp(root, { full = false } = {}) {
+export function renderVaultGitHelp(root, { full = false, initialized = true } = {}) {
   const vault = oneLine(root);
   const git = (arguments_) => `  git -C ${quotedPath(root)} ${arguments_}`;
-  const concise = `Bookmark vault Git help
+  const initialization = initialized
+    ? ''
+    : `No initialized bookmark vault was found. First run:\n  npm run bookmark -- vault init\n\n`;
+  const concise = `${initialization}Bookmark vault Git help
 
 Vault: ${vault}
 This command does not run Git or access the network.

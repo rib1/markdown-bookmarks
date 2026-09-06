@@ -25,7 +25,7 @@ docker compose up --build
 Or run the current prototype directly with Node.js 26 and npm:
 
 ```powershell
-npm run bookmark -- init
+npm run bookmark -- vault init
 npm start
 ```
 

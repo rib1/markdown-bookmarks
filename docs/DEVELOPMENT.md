@@ -180,8 +180,8 @@ metadata enrichment.
 The TUI command entry point must support:
 
 ```text
-init [--path PATH] [--no-skill]
 skill install [--path PATH]
+vault init [--path PATH] [--no-skill]
 vault git-help [--full]
 vault open [--dry-run]
 save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
@@ -209,6 +209,8 @@ Git, inspect credentials or remotes, or access the network. `--full` adds less
 common initialization, synchronization, and conflict guidance.
 `vault open` launches the native file explorer; in Docker it prints host-side
 commands instead. `--dry-run` never launches an application.
+When the schema manifest is absent, vault help and Git help lead with
+`vault init`; `vault open` fails with the same actionable instruction.
 
 `find` prints compact, numbered terminal results containing title, short stable
 ID, URL, comma-separated tags, and optional fuzzy-match details. Results use
