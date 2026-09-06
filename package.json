@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "quality": "npm run lint && npm test",
     "start": "node src/server.js",
-    "test": "node --test test/vault.test.js test/cli.test.js test/server.test.js test/search-results-page.test.js test/fuzzy-search.test.js test/api-contract.test.js test/extension-compatibility.test.js"
+    "test": "node --test test/vault.test.js test/cli.test.js test/find-query.test.js test/tui-arguments.test.js test/server.test.js test/search-results-page.test.js test/fuzzy-search.test.js test/api-contract.test.js test/extension-compatibility.test.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

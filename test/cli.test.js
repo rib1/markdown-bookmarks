@@ -48,16 +48,17 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   const generalHelp = await run(process.execPath, [cli, 'help']);
   assert.match(generalHelp.stdout, /Markdown Bookmarks commands:/);
   assert.match(generalHelp.stdout, /save --url URL .*--shared-by NAME.*--via CHANNEL/);
-  assert.match(generalHelp.stdout, /find QUERY .*--expand.*--with BROWSER/);
+  assert.match(generalHelp.stdout, /find \[QUERY\] .*--expand.*--with BROWSER/);
   assert.match(generalHelp.stdout, /--saved-within day\|week\|month\|year/);
   assert.match(generalHelp.stdout, /--saved-since YYYY-MM-DD/);
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
-  assert.match(generalHelp.stdout, /find QUERY .*--fuzzy.*--browser/);
+  assert.match(generalHelp.stdout, /find \[QUERY\] .*--fuzzy.*--browser/);
   assert.match(generalHelp.stdout, /Keep the "--" in "npm run bookmark -- COMMAND"/);
   assert.match(generalHelp.stdout, /--browser, --fuzzy, --expand, --pick, --saved-within, --saved-since, --with,/);
   assert.match(generalHelp.stdout, /Compact find output:\n\s+1\. Night Drive \[d34db33f\]/);
   assert.match(generalHelp.stdout, /TAGS: bandcamp, music/);
   assert.match(generalHelp.stdout, /find QUERY --expand to include vault file paths and full Markdown records/);
+  assert.match(generalHelp.stdout, /QUERY may be omitted when --saved-within or --saved-since is provided/);
   assert.match(generalHelp.stdout, /displayed ID prefix can be used with open/);
   assert.match(generalHelp.stdout, /open d34db33f/);
   assert.match(generalHelp.stdout, /Common workflows:/);
@@ -65,9 +66,11 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /find database\n\s+npm run bookmark -- open database --pick 3/);
   assert.match(generalHelp.stdout, /find database --expand/);
   assert.match(generalHelp.stdout, /find database --saved-within week/);
+  assert.match(generalHelp.stdout, /find --saved-within day/);
   assert.match(generalHelp.stdout, /find travel --saved-within month/);
   assert.match(generalHelp.stdout, /find archive --saved-within year/);
   assert.match(generalHelp.stdout, /find database --saved-since 2026-09-01/);
+  assert.match(generalHelp.stdout, /find --saved-since 2026-09-01/);
   assert.match(generalHelp.stdout, /open database --saved-since 2026-09-01 --pick 3/);
   assert.match(generalHelp.stdout, /open database --pick 3 --with firefox/);
   assert.match(generalHelp.stdout, /find database --browser --with chrome/);
@@ -101,6 +104,55 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /Docker cannot launch a host application/);
 });
 
+test('TUI help wins consistently and argument errors are concise', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-tui-arguments-'));
+  const env = { ...process.env, BOOKMARK_VAULT: root };
+  const helpCases = [
+    [['find', '--help'], /Search bookmarks and print deterministic TUI results/],
+    [['find', 'alpha', '--wat', '--help'], /Usage: npm run bookmark -- find QUERY/],
+    [['open', 'alpha', '--help'], /Find a bookmark and open its HTTP\/HTTPS URL/],
+    [['save', '--wat', '--help'], /Save one HTTP\/HTTPS bookmark through the TUI/],
+    [['init', 'unexpected', '-h'], /Initialize the selected private bookmark vault/],
+    [['skill', 'unknown', '--help'], /Install or refresh the vault-management LLM skill/],
+    [['help', 'find'], /--saved-since DATE/]
+  ];
+  for (const [arguments_, expected] of helpCases) {
+    const result = await run(process.execPath, [cli, ...arguments_], { env });
+    assert.match(result.stdout, expected);
+    assert.equal(result.stderr, '');
+  }
+
+  const errorCases = [
+    [['find'], /Usage: npm run bookmark -- find QUERY/],
+    [['find', '--wat'], /Unknown option for this command: --wat/],
+    [['find', '--pick', '2'], /Unknown option for this command: --pick/],
+    [['find', 'alpha', 'beta'], /Unexpected extra argument.*Quote multiword values/],
+    [['find', '--saved-within', 'day', '--saved-within', 'year'], /Option may only be provided once/],
+    [['find', '--saved-within', 'day', '--saved-since', '2026-09-01'], /Use either --saved-within or --saved-since/],
+    [['find', '--saved-since', '2026-02-30'], /must be a valid date/],
+    [['find', 'alpha', '--fuzzy=false'], /--fuzzy does not accept a value/],
+    [['find', 'alpha', '--dry-run'], /--dry-run requires --browser/],
+    [['find', 'alpha', '--browser', '--expand'], /Use either --expand or --browser/],
+    [['open', 'alpha', '--browser'], /Unknown option for this command: --browser/],
+    [['save', '--wat'], /Unknown option for this command: --wat/],
+    [['init', 'unexpected'], /Unexpected extra argument/],
+    [['unknown'], /Unknown command: unknown/]
+  ];
+  for (const [arguments_, expected] of errorCases) {
+    await assert.rejects(
+      () => run(process.execPath, [cli, ...arguments_], { env }),
+      (error) => {
+        assert.match(error.stderr, expected);
+        assert.doesNotMatch(error.stderr, /\n\s+at |file:\/\//);
+        return true;
+      }
+    );
+  }
+
+  const hyphenQuery = await run(process.execPath, [cli, 'find', '--', '-alpha'], { env });
+  assert.equal(hyphenQuery.stdout.trim(), 'No bookmarks found for: -alpha');
+});
+
 test('empty interactive link selection cancels without choosing a bookmark', () => {
   const results = [{ file: 'one.md' }, { file: 'two.md' }];
   assert.equal(interactiveResult(results, ''), CANCELLED_SELECTION);
@@ -129,6 +181,37 @@ test('time-filtered find numbering is reused by open --pick and --with', async (
   assert.match(found.stdout, /^1\. Alpha recent /m);
   assert.match(found.stdout, /^2\. Beta recent /m);
   assert.doesNotMatch(found.stdout, /Aardvark old/);
+
+  for (const period of ['day', 'week', 'month', 'year']) {
+    const recentOnly = await run(process.execPath,
+      [cli, 'find', '--saved-within', period], { env });
+    assert.match(recentOnly.stdout, /^1\. Alpha recent /m);
+    assert.match(recentOnly.stdout, /^2\. Beta recent /m);
+    assert.doesNotMatch(recentOnly.stdout, /Aardvark old/);
+  }
+
+  const sinceOnly = await run(process.execPath,
+    [cli, 'find', '--saved-since', cutoff], { env });
+  assert.match(sinceOnly.stdout, /^1\. Alpha recent /m);
+  assert.match(sinceOnly.stdout, /^2\. Beta recent /m);
+  assert.doesNotMatch(sinceOnly.stdout, /Aardvark old/);
+
+  const filterOnlyBrowser = await run(process.execPath,
+    [cli, 'find', '--saved-within', 'day', '--browser', '--dry-run'], { env });
+  const filterOnlyPage = await fs.readFile(fileURLToPath(filterOnlyBrowser.stdout.trim()), 'utf8');
+  assert.match(filterOnlyPage, /2 results for “saved within day”/);
+
+  const noRecent = await run(process.execPath,
+    [cli, 'find', '--saved-since', '2099-01-01'], { env });
+  assert.equal(noRecent.stdout.trim(), 'No bookmarks found for: saved since 2099-01-01');
+
+  await assert.rejects(
+    () => run(process.execPath, [cli, 'find'], { env }),
+    (error) => {
+      assert.match(error.stderr, /Usage: npm run bookmark -- find QUERY \[options\]/);
+      return true;
+    }
+  );
 
   const browserCapture = path.join(root, 'time-filtered-browser-url.txt');
   const fakeBrowser = path.join(root, 'fake-time-filtered-browser');

@@ -175,21 +175,32 @@ metadata enrichment.
 - Report `Saved` only when a bookmark was persisted, then show actionable warnings for omitted or unconfirmed fields.
 - Keep test-only capture overrides isolated from normal toolbar behavior.
 
-## CLI contract
+## TUI contract
 
-The CLI must support:
+The TUI command entry point must support:
 
 ```text
 init [--path PATH] [--no-skill]
 skill install [--path PATH]
 save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
-find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
+find [QUERY] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
 open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
 ```
 
 All npm examples must include the argument separator:
 `npm run bookmark -- COMMAND`. Without `--`, npm may consume CLI options such
 as `--browser` or `--fuzzy` instead of forwarding them.
+
+The `find` query may be omitted when `--saved-within` or `--saved-since`
+narrows the results. Bare `find` remains invalid to avoid accidentally printing
+the entire private vault.
+
+The TUI uses a single-pass, schema-driven argument parser. Command help takes
+precedence over validation and exits successfully. Without help, reject unknown,
+unsupported, duplicate, conflicting, missing-value, and extra-positional input.
+Dates use strict `YYYY-MM-DD` validation. Expected input failures print concise
+messages without stack traces; set `BOOKMARK_DEBUG=1` only when a developer
+needs the diagnostic stack.
 
 `find` prints compact, numbered terminal results containing title, short stable
 ID, URL, comma-separated tags, and optional fuzzy-match details. Results use

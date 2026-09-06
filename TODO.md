@@ -69,6 +69,18 @@ prototype sessions.
 
 ## Search and opening
 
+- [x] Refactor TUI argument parsing to reject ambiguous, duplicate, unknown, and
+      malformed options with concise errors.
+- [x] Allow time-filter-only searches such as
+      `find --saved-within day` without requiring a text term.
+- [ ] Add a local Web UI that reuses the terminal UI (TUI) search, filtering,
+      result
+      ordering, selection, opening, and vault-operation logic instead of
+      implementing separate behavior, using vanilla JavaScript with no external
+      dependencies. First refactor the TUI into a thin adapter over shared
+      application logic kept in focused, directly testable files that are
+      imported only where needed. Keep TUI and Web behavior equal with shared
+      contract tests. See [Web UI plan](docs/WEB-UI-PLAN.md).
 - [x] Search URLs, titles, tags, summaries, and Markdown content.
 - [x] Return file path, URL, and full Markdown content from `find`.
 - [x] Add `--saved-within day|week|month|year` filtering.

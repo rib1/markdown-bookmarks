@@ -22,6 +22,7 @@ import { sortSearchResults } from './search-result-order.js';
 import { appendShareEvent, createShareEvent } from './share-history.js';
 import { appendCaptureEvent, createCaptureEvent } from './capture-history.js';
 import { vaultRoot } from './vault-path.js';
+import { searchCutoff } from './find-query.js';
 
 export { vaultRoot } from './vault-path.js';
 
@@ -177,10 +178,7 @@ function savedAfter(content, cutoff) {
 export async function findBookmarks(query, root = vaultRoot(), { savedWithin, savedSince, fuzzy = false } = {}) {
   const base = path.join(root, 'bookmarks');
   const results = [];
-  const durations = { day: 1, week: 7, month: 30, year: 365 };
-  const cutoff = savedSince ? Date.parse(savedSince) : savedWithin ? Date.now() - (durations[savedWithin] || 0) * 86400000 : undefined;
-  if (savedWithin && !durations[savedWithin]) throw new Error('savedWithin must be one of: day, week, month, year');
-  if (savedSince && Number.isNaN(cutoff)) throw new Error('savedSince must be a valid date such as 2026-09-04');
+  const cutoff = searchCutoff({ savedWithin, savedSince });
   async function walk(dir) {
     let entries;
     try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }

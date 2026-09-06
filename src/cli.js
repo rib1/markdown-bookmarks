@@ -9,29 +9,11 @@ import {
 import { metadataValue, sortSearchResults } from './search-result-order.js';
 import { CANCELLED_SELECTION, interactiveResult, pickedResult } from './open-selection.js';
 import { readList } from './bookmark-format.js';
+import { parseFindArguments } from './tui-find-arguments.js';
+import { parseOpenArguments } from './tui-open-arguments.js';
+import { parseInitArguments, parseSaveArguments, parseSkillInstallArguments } from './tui-basic-arguments.js';
 
 const [command, ...args] = process.argv.slice(2);
-
-function option(name) {
-  const index = args.indexOf(name);
-  if (index >= 0) {
-    const value = args[index + 1];
-    return value?.startsWith('--') ? undefined : value;
-  }
-  const inline = args.find((argument) => argument.startsWith(`${name}=`));
-  return inline?.slice(name.length + 1) || undefined;
-}
-
-function positionalArgument(valueOptions = []) {
-  for (let index = 0; index < args.length; index++) {
-    if (valueOptions.includes(args[index])) {
-      index++;
-      continue;
-    }
-    if (!args[index].startsWith('-')) return args[index];
-  }
-  return undefined;
-}
 
 function printSearchResult(result, index, expand = false) {
   const title = metadataValue(result.content, 'title') || '(untitled)';
@@ -86,6 +68,76 @@ async function launchBrowserOrExplain(target, browser, { linkAlreadyPrinted = fa
     process.exitCode = 1;
     return false;
   }
+}
+
+function printInitHelp() {
+  console.log(`Usage: npm run bookmark -- init [options]
+
+Initialize the selected private bookmark vault.
+
+Options:
+  --path PATH       Initialize this vault path instead of the configured default.
+  --no-skill        Do not install the optional vault-management LLM skill.
+  --help, -h        Show this help.`);
+}
+
+function printSkillHelp() {
+  console.log(`Usage: npm run bookmark -- skill install [options]
+
+Install or refresh the vault-management LLM skill.
+
+Options:
+  --path PATH       Install into this vault path instead of the configured default.
+  --help, -h        Show this help.`);
+}
+
+function printSaveHelp() {
+  console.log(`Usage: npm run bookmark -- save --url URL [options]
+
+Save one HTTP/HTTPS bookmark through the TUI.
+
+Options:
+  --url URL         Bookmark URL. Required.
+  --title TITLE     Bookmark title.
+  --tags TAGS       Comma-separated tags.
+  --shared-by NAME  Person who sent the link.
+  --via CHANNEL     Channel through which the link was received.
+  --help, -h        Show this help.`);
+}
+
+function printFindHelp() {
+  console.log(`Usage: npm run bookmark -- find QUERY [options]
+   or: npm run bookmark -- find --saved-within day|week|month|year [options]
+   or: npm run bookmark -- find --saved-since YYYY-MM-DD [options]
+
+Search bookmarks and print deterministic TUI results.
+
+Options:
+  --saved-within PERIOD
+                    Match bookmarks saved within day, week, month, or year.
+  --saved-since DATE
+                    Match bookmarks saved on or after strict YYYY-MM-DD.
+  --fuzzy           Use typo-tolerant ranked matching.
+  --expand          Include vault paths and full Markdown records.
+  --browser         Generate a local HTML results page.
+  --with BROWSER    Open that page with a selected browser; requires --browser.
+  --dry-run         Print the generated page URL without opening; requires --browser.
+  --help, -h        Show this help.
+
+Rules:
+  QUERY may be omitted only with one time filter. Use either --saved-within or
+  --saved-since, not both. Quote a multiword query. Use the end-of-options
+  marker before a query beginning with a hyphen. --expand and --browser cannot
+  be combined.
+
+Examples:
+  npm run bookmark -- find amiga
+  npm run bookmark -- find 'amiga music'
+  npm run bookmark -- find --saved-within day
+  npm run bookmark -- find --saved-since 2026-09-01
+  npm run bookmark -- find amiga --saved-within month --fuzzy
+  npm run bookmark -- find amiga --browser --dry-run
+  npm run bookmark -- find -- -amiga`);
 }
 
 function printOpenHelp() {
@@ -163,13 +215,19 @@ function printHelp() {
   init [--path PATH] [--no-skill]
   skill install [--path PATH]
   save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
-  find QUERY [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
+  find [QUERY] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
   open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
 
 npm syntax:
   Keep the "--" in "npm run bookmark -- COMMAND". It forwards options such as
   --browser, --fuzzy, --expand, --pick, --saved-within, --saved-since, --with,
-  and --dry-run to the bookmark CLI.
+  and --dry-run to the bookmark TUI.
+
+Argument rules:
+  Run npm run bookmark -- COMMAND --help for command-specific help. Help wins
+  when combined with other arguments. Unknown, unsupported, duplicate, or
+  conflicting options are errors. Quote multiword queries. Expected input
+  errors print a concise message without a JavaScript stack trace.
 
 Compact find output:
   1. Night Drive [d34db33f]
@@ -178,6 +236,7 @@ Compact find output:
 
 Use find QUERY --expand to include vault file paths and full Markdown records.
 The displayed ID prefix can be used with open when it uniquely identifies a bookmark.
+QUERY may be omitted when --saved-within or --saved-since is provided.
 
 Common workflows:
   npm run bookmark -- save --url https://example.test/page --shared-by Alice --via Signal
@@ -186,6 +245,8 @@ Common workflows:
   npm run bookmark -- find database --expand
   npm run bookmark -- open d34db33f
   npm run bookmark -- find database --saved-within week
+  npm run bookmark -- find --saved-within day
+  npm run bookmark -- find --saved-since 2026-09-01
   npm run bookmark -- find travel --saved-within month
   npm run bookmark -- find archive --saved-within year
   npm run bookmark -- find database --saved-since 2026-09-01
@@ -194,7 +255,7 @@ Common workflows:
   npm run bookmark -- find triper --fuzzy
   npm run bookmark -- find database --browser --with chrome
 
-Run "npm run bookmark -- open --help" for launch options and browser details.`);
+Run "npm run bookmark -- COMMAND --help" for command-specific options.`);
 }
 
 async function chooseOpenResult(results, requestedPick) {
@@ -215,93 +276,105 @@ async function chooseOpenResult(results, requestedPick) {
   }
 }
 
-if (command === 'help' || command === '--help' || command === '-h') {
-  printHelp();
-} else if (command === 'init') {
-  const root = option('--path') || vaultRoot();
-  await initVault(root, { installSkill: !args.includes('--no-skill') });
-  console.log(`Vault ready: ${root}`);
-  if (!args.includes('--no-skill')) console.log('LLM skill installed: .codex/skills/markdown-bookmark-vault/SKILL.md');
-  console.log('Next: git -C "' + root + '" init');
-} else if (command === 'skill' && args[0] === 'install') {
-  const root = option('--path') || vaultRoot();
-  const target = await installVaultSkill(root);
-  console.log(`LLM skill installed in vault: ${target}`);
-} else if (command === 'save') {
-  const url = option('--url');
-  if (!url) throw new Error('Usage: npm run bookmark -- save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]');
-  const result = await saveBookmark({
-    url,
-    title: option('--title'),
-    tags: (option('--tags') || '').split(','),
-    shared_by: option('--shared-by'),
-    shared_via: option('--via')
-  });
-  console.log(JSON.stringify(result, null, 2));
-} else if (command === 'find') {
-  const query = positionalArgument(['--saved-within', '--saved-since', '--with']);
-  if (!query) throw new Error('Usage: npm run bookmark -- find QUERY');
-  const selectedBrowser = option('--with');
-  const fuzzy = args.includes('--fuzzy');
-  if (args.includes('--with') && (!selectedBrowser || selectedBrowser.startsWith('-'))) {
-    throw new Error('--with requires a browser name or executable');
+function printNamedHelp(name) {
+  const printers = { init: printInitHelp, skill: printSkillHelp, save: printSaveHelp, find: printFindHelp, open: printOpenHelp };
+  const printer = printers[name];
+  if (!printer) throw new Error(`Unknown command: ${name}. Run npm run bookmark -- help.`);
+  printer();
+}
+
+async function runTui() {
+  if (!command || command === '--help' || command === '-h') return printHelp();
+  if (command === 'help') {
+    if (args.length > 1) throw new Error(`Unexpected extra argument: ${JSON.stringify(args[1])}`);
+    return args[0] ? printNamedHelp(args[0]) : printHelp();
   }
-  if (selectedBrowser && !args.includes('--browser')) throw new Error('--with requires find --browser');
-  const results = await findBookmarks(query, undefined, {
-    savedWithin: option('--saved-within'),
-    savedSince: option('--saved-since'),
-    fuzzy
-  });
-  if (!results.length) {
-    console.log(`No bookmarks found for: ${query}`);
-  } else if (args.includes('--browser')) {
-    const page = await createSearchResultsPage(query, results);
-    const hostVaultPath = process.env.BOOKMARK_RESULTS_HOST_VAULT;
-    const pageUrl = hostVaultPath ? hostSearchResultsFileUrl(page.token, hostVaultPath) : page.fileUrl;
-    if (args.includes('--dry-run')) console.log(pageUrl);
-    else {
-      console.log('Search results file:');
-      console.log(pageUrl);
-      if (!hostVaultPath) {
-        const launched = await launchBrowserOrExplain(pageUrl, selectedBrowser, { linkAlreadyPrinted: true });
-        if (launched) console.log(`Opened ${page.count} bookmark result${page.count === 1 ? '' : 's'} in the browser.`);
+  if (command === 'init') {
+    const options = parseInitArguments(args);
+    if (options.help) return printInitHelp();
+    const root = options.path || vaultRoot();
+    await initVault(root, { installSkill: !options.noSkill });
+    console.log(`Vault ready: ${root}`);
+    if (!options.noSkill) console.log('LLM skill installed: .codex/skills/markdown-bookmark-vault/SKILL.md');
+    console.log('Next: git -C "' + root + '" init');
+    return;
+  }
+  if (command === 'skill') {
+    if (args.some((argument) => argument === '--help' || argument === '-h')) return printSkillHelp();
+    if (args[0] !== 'install') throw new Error('Usage: npm run bookmark -- skill install [--path PATH]');
+    const options = parseSkillInstallArguments(args.slice(1));
+    const root = options.path || vaultRoot();
+    const target = await installVaultSkill(root);
+    console.log(`LLM skill installed in vault: ${target}`);
+    return;
+  }
+  if (command === 'save') {
+    const options = parseSaveArguments(args);
+    if (options.help) return printSaveHelp();
+    const result = await saveBookmark({
+      url: options.url,
+      title: options.title,
+      tags: (options.tags || '').split(','),
+      shared_by: options.sharedBy,
+      shared_via: options.via
+    });
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  if (command === 'find') {
+    const request = parseFindArguments(args);
+    if (request.help) return printFindHelp();
+    const results = await findBookmarks(request.query, undefined, {
+      savedWithin: request.savedWithin,
+      savedSince: request.savedSince,
+      fuzzy: request.fuzzy
+    });
+    if (!results.length) {
+      console.log(`No bookmarks found for: ${request.description}`);
+    } else if (request.browser) {
+      const page = await createSearchResultsPage(request.description, results);
+      const hostVaultPath = process.env.BOOKMARK_RESULTS_HOST_VAULT;
+      const pageUrl = hostVaultPath ? hostSearchResultsFileUrl(page.token, hostVaultPath) : page.fileUrl;
+      if (request.dryRun) console.log(pageUrl);
+      else {
+        console.log('Search results file:');
+        console.log(pageUrl);
+        if (!hostVaultPath) {
+          const launched = await launchBrowserOrExplain(pageUrl, request.withBrowser, { linkAlreadyPrinted: true });
+          if (launched) console.log(`Opened ${page.count} bookmark result${page.count === 1 ? '' : 's'} in the browser.`);
+        }
       }
+    } else {
+      sortSearchResults(results).forEach((result, index) => printSearchResult(result, index, request.expand));
     }
-  } else {
-    sortSearchResults(results).forEach((result, index) => printSearchResult(result, index, args.includes('--expand')));
+    return;
   }
-} else if (command === 'open') {
-  if (args.includes('--help') || args.includes('-h')) {
-    printOpenHelp();
-  } else {
-    const query = positionalArgument(['--pick', '--with', '--saved-within', '--saved-since']);
-    const dryRun = args.includes('--dry-run');
-    const fuzzy = args.includes('--fuzzy');
-    const selectedBrowser = option('--with');
-    if (args.includes('--with') && (!selectedBrowser || selectedBrowser.startsWith('-'))) {
-      throw new Error('--with requires a browser name or executable');
-    }
-    if (!query) throw new Error('Usage: npm run bookmark -- open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]');
-    const selection = await chooseOpenResult(await findBookmarks(query, undefined, {
-      fuzzy,
-      savedWithin: option('--saved-within'),
-      savedSince: option('--saved-since')
-    }), option('--pick'));
+  if (command === 'open') {
+    const request = parseOpenArguments(args);
+    if (request.help) return printOpenHelp();
+    const selection = await chooseOpenResult(await findBookmarks(request.query, undefined, {
+      fuzzy: request.fuzzy,
+      savedWithin: request.savedWithin,
+      savedSince: request.savedSince
+    }), request.pick);
     if (selection === CANCELLED_SELECTION) {
       console.log('Cancelled.');
-    } else {
-      if (!selection) throw new Error(`No bookmark found for: ${query}`);
-      const url = selection.content.match(/^url:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
-      if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Bookmark has no safe HTTP URL: ${selection.file}`);
-      if (dryRun) {
-        console.log(url);
-      } else if (process.env.BOOKMARK_RESULTS_HOST_VAULT) {
-        console.log(`Open bookmark${selectedBrowser ? ` in ${selectedBrowser}` : ''}: ${url}`);
-      } else {
-        await launchBrowserOrExplain(url, selectedBrowser);
-      }
+      return;
     }
+    if (!selection) throw new Error(`No bookmark found for: ${request.query}`);
+    const url = selection.content.match(/^url:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
+    if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Bookmark has no safe HTTP URL: ${selection.file}`);
+    if (request.dryRun) console.log(url);
+    else if (process.env.BOOKMARK_RESULTS_HOST_VAULT) {
+      console.log(`Open bookmark${request.withBrowser ? ` in ${request.withBrowser}` : ''}: ${url}`);
+    } else await launchBrowserOrExplain(url, request.withBrowser);
+    return;
   }
-} else {
-  printHelp();
+  throw new Error(`Unknown command: ${command}. Run npm run bookmark -- help.`);
 }
+
+await runTui().catch((error) => {
+  console.error(error?.message || String(error));
+  if (process.env.BOOKMARK_DEBUG === '1' && error?.stack) console.error(error.stack);
+  process.exitCode = 1;
+});

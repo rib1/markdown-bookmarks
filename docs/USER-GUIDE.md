@@ -218,7 +218,7 @@ Imgur bookmarks receive the `imgur` tag, their image/album/gallery type, and an
 
 ## Command help
 
-The CLI includes a compact command reference plus workflow examples. Show the
+The TUI includes a compact command reference plus workflow examples. Show the
 full command list with:
 
 ```powershell
@@ -227,7 +227,7 @@ npm run bookmark -- help
 
 The `--` after `bookmark` is required for npm commands. It tells npm to forward
 following options such as `--browser`, `--fuzzy`, `--pick`, `--with`, and `--dry-run` to
-the bookmark CLI. Without it, npm may consume an option; for example,
+the bookmark TUI. Without it, npm may consume an option; for example,
 `npm run bookmark find amiga --browser` performs a plain text search. Use:
 
 ```powershell
@@ -249,7 +249,28 @@ The detailed help explains `--pick`, `--with`, `--dry-run`, supported browser
 aliases, custom application/executable values, platform behavior, and the fact
 that Docker cannot launch applications on the host.
 
-## Search from the CLI
+Every command supports `--help` and `-h`, and help takes precedence over other
+arguments:
+
+```powershell
+npm run bookmark -- find --help
+npm run bookmark -- save --help
+npm run bookmark -- init --help
+```
+
+The TUI rejects unknown, unsupported, duplicate, or conflicting options instead
+of silently ignoring them. It also rejects extra unquoted terms, missing option
+values, and dates that are not real calendar dates in strict `YYYY-MM-DD`
+format. Do not combine `--saved-within` and `--saved-since`. These expected
+errors are concise and do not print JavaScript stack traces. Quote a multiword
+search, and use `--` before a search beginning with a hyphen:
+
+```powershell
+npm run bookmark -- find "amiga music"
+npm run bookmark -- find -- -amiga
+```
+
+## Search from the TUI
 
 With the Docker companion running:
 
@@ -293,7 +314,7 @@ prefix is unique:
 npm run bookmark -- open d34db33f
 ```
 
-The CLI can also record manually supplied sender information:
+The TUI can also record manually supplied sender information:
 
 ```powershell
 npm run bookmark -- save --url https://example.test/page --title "Useful page" --shared-by Alice --via Signal
@@ -302,15 +323,19 @@ npm run bookmark -- save --url https://example.test/page --title "Useful page" -
 Limit results by their original save time with `--saved-within`:
 
 ```powershell
+npm run bookmark -- find --saved-within day
 npm run bookmark -- find database --saved-within week
 npm run bookmark -- find travel --saved-within month
 npm run bookmark -- find archive --saved-within year
 ```
 
-The accepted periods are `day`, `week`, `month`, and `year`. To use a specific
-cutoff date instead, pass an ISO date:
+Omit the search term to list everything saved during the selected period. The
+accepted periods are `day`, `week`, `month`, and `year`. Bare `find` without a
+term or time filter remains invalid. To use a specific cutoff date instead,
+pass an ISO date, with or without a search term:
 
 ```powershell
+npm run bookmark -- find --saved-since 2026-09-01
 npm run bookmark -- find database --saved-since 2026-09-01
 ```
 
@@ -370,8 +395,9 @@ under the private vault's Git-ignored `views/.search-results/` directory. The
 page contains private result metadata, loads no external assets, and is never a
 source record. Server startup deletes generated pages older than 24 hours. Add
 `--dry-run` to generate and print the page URL without opening it.
-If no bookmarks match, the command prints `No bookmarks found for: QUERY` and
-does not create a page or launch a browser.
+If no bookmarks match, the command describes the term or time filter, such as
+`No bookmarks found for: saved within day`, and does not create a page or
+launch a browser.
 
 Open a matching bookmark in the default browser with the native npm workflow:
 
