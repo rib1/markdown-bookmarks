@@ -104,7 +104,7 @@ prototype sessions.
 ## Git integration
 
 - [x] Keep Git operations user-controlled by default.
-- [ ] Add CLI guidance for status, diff, commit, pull, and push.
+- [x] Add TUI guidance for status, diff, commit, pull, and push.
 - [ ] Add optional local commit modes: manual, on-save, or daily.
 - [x] Never put Git credentials in the browser extension.
 - [ ] Test the private vault workflow with GitHub and GitLab remotes.

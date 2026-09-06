@@ -431,21 +431,30 @@ without launching a browser.
 
 ## Version the private vault
 
-Run Git from the private vault directory:
+Print a concise, copyable Git workflow for the configured vault:
 
-```bash
-cd ../my-bookmarks
-git status
-git add bookmarks/
-git commit -m "Save bookmarks"
-git push
+```powershell
+npm run bookmark -- vault git-help
 ```
 
-Pull before saving on another computer:
+Add initialization, remote-check, conflict, and commit-message examples with:
 
-```bash
-git pull --rebase
+```powershell
+npm run bookmark -- vault git-help --full
 ```
+
+The help command does not run Git or access the network. Review vault changes,
+pull before saving on another machine, and commit and push explicitly.
+
+Open the vault in Finder, File Explorer, or the Linux file manager with:
+
+```powershell
+npm run bookmark -- vault open
+```
+
+Use `--dry-run` to print the native command without opening anything. In
+Docker, the command prints a host-side command because a container cannot open
+the host file manager.
 
 ## Run the browser end-to-end test
 

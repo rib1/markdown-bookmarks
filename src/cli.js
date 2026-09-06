@@ -12,6 +12,13 @@ import { readList } from './bookmark-format.js';
 import { parseFindArguments } from './tui-find-arguments.js';
 import { parseOpenArguments } from './tui-open-arguments.js';
 import { parseInitArguments, parseSaveArguments, parseSkillInstallArguments } from './tui-basic-arguments.js';
+import { parseVaultArguments } from './tui-vault-arguments.js';
+import { renderVaultGitHelp } from './vault-git-help.js';
+import {
+  formatDirectoryCommand,
+  hostDirectoryCommands,
+  openDirectory
+} from './vault-directory-launcher.js';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -103,6 +110,41 @@ Options:
   --shared-by NAME  Person who sent the link.
   --via CHANNEL     Channel through which the link was received.
   --help, -h        Show this help.`);
+}
+
+function printVaultHelp() {
+  console.log(`Usage: npm run bookmark -- vault git-help [--full]
+   or: npm run bookmark -- vault open [--dry-run]
+
+No Git command is run and no network connection is made by git-help. Vault open
+uses the native file explorer; Docker prints a host command instead.
+
+Options:
+  --full            Include initialization, remote-check, and conflict help.
+  --dry-run         Print the native file-explorer command without running it.
+  --help, -h        Show this help.`);
+}
+
+async function openVaultDirectory(root, dryRun) {
+  const hostRoot = process.env.BOOKMARK_RESULTS_HOST_VAULT;
+  if (hostRoot) {
+    console.log('Open the vault on the host:');
+    hostDirectoryCommands(hostRoot).forEach((line) => console.log(`  ${line}`));
+    return;
+  }
+  const commandLine = formatDirectoryCommand(root);
+  if (dryRun) {
+    console.log(commandLine);
+    return;
+  }
+  try {
+    await openDirectory(root);
+    console.log(`Opened vault: ${root}`);
+  } catch {
+    console.error('Could not open the vault in the native file explorer.');
+    console.log(`Open it manually with: ${commandLine}`);
+    process.exitCode = 1;
+  }
 }
 
 function printFindHelp() {
@@ -214,6 +256,8 @@ function printHelp() {
   console.log(`Markdown Bookmarks commands:
   init [--path PATH] [--no-skill]
   skill install [--path PATH]
+  vault git-help [--full]
+  vault open [--dry-run]
   save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
   find [QUERY] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
   open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
@@ -239,6 +283,8 @@ The displayed ID prefix can be used with open when it uniquely identifies a book
 QUERY may be omitted when --saved-within or --saved-since is provided.
 
 Common workflows:
+  npm run bookmark -- vault git-help
+  npm run bookmark -- vault open
   npm run bookmark -- save --url https://example.test/page --shared-by Alice --via Signal
   npm run bookmark -- find database
   npm run bookmark -- open database --pick 3
@@ -277,7 +323,14 @@ async function chooseOpenResult(results, requestedPick) {
 }
 
 function printNamedHelp(name) {
-  const printers = { init: printInitHelp, skill: printSkillHelp, save: printSaveHelp, find: printFindHelp, open: printOpenHelp };
+  const printers = {
+    init: printInitHelp,
+    skill: printSkillHelp,
+    vault: printVaultHelp,
+    save: printSaveHelp,
+    find: printFindHelp,
+    open: printOpenHelp
+  };
   const printer = printers[name];
   if (!printer) throw new Error(`Unknown command: ${name}. Run npm run bookmark -- help.`);
   printer();
@@ -306,6 +359,14 @@ async function runTui() {
     const root = options.path || vaultRoot();
     const target = await installVaultSkill(root);
     console.log(`LLM skill installed in vault: ${target}`);
+    return;
+  }
+  if (command === 'vault') {
+    const options = parseVaultArguments(args);
+    if (options.help) return printVaultHelp();
+    const root = vaultRoot();
+    if (options.action === 'git-help') console.log(renderVaultGitHelp(root, { full: options.full }));
+    else await openVaultDirectory(root, options.dryRun);
     return;
   }
   if (command === 'save') {
