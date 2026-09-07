@@ -10,6 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CANCELLED_SELECTION, interactiveResult } from '../src/open-selection.js';
 import { saveBookmark } from '../src/vault.js';
 import { formatDirectoryCommand } from '../src/vault-directory-launcher.js';
+import { readList } from '../src/bookmark-format.js';
 
 const run = promisify(execFile);
 const cli = path.resolve('src', 'cli.js');
@@ -56,6 +57,8 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /vault init \[--path PATH\] \[--no-skill\]/);
   assert.match(generalHelp.stdout, /vault git-help \[--full\]/);
   assert.match(generalHelp.stdout, /vault open \[--dry-run\]/);
+  assert.match(generalHelp.stdout, /vault tag-lint \[--full\] \[--check\]/);
+  assert.match(generalHelp.stdout, /vault tag-fix --from TAG --to TAG \[--apply\]/);
   assert.match(generalHelp.stdout, /find \[QUERY\] .*--fuzzy.*--browser/);
   assert.match(generalHelp.stdout, /Keep the "--" in "npm run bookmark -- COMMAND"/);
   assert.match(generalHelp.stdout, /--browser, --fuzzy, --expand, --pick, --saved-within, --saved-since, --with,/);
@@ -110,6 +113,8 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   const vaultHelp = await run(process.execPath, [cli, 'vault', '--help']);
   assert.match(vaultHelp.stdout, /vault git-help \[--full\]/);
   assert.match(vaultHelp.stdout, /vault open \[--dry-run\]/);
+  assert.match(vaultHelp.stdout, /vault tag-lint \[--full\] \[--check\]/);
+  assert.match(vaultHelp.stdout, /tag-fix --from TAG --to TAG \[--apply\]/);
   assert.match(vaultHelp.stdout, /No Git command is run/);
 });
 
@@ -124,6 +129,7 @@ test('TUI help wins consistently and argument errors are concise', async () => {
     [['vault', 'init', 'unexpected', '-h'], /vault init \[--path PATH\] \[--no-skill\]/],
     [['skill', 'unknown', '--help'], /Install or refresh the vault-management LLM skill/],
     [['vault', 'unknown', '--wat', '--help'], /vault git-help \[--full\]/],
+    [['vault', 'tag-fix', '--wat', '--help'], /vault tag-lint \[--full\]/],
     [['help', 'find'], /--saved-since DATE/]
   ];
   for (const [arguments_, expected] of helpCases) {
@@ -146,10 +152,12 @@ test('TUI help wins consistently and argument errors are concise', async () => {
     [['open', 'alpha', '--browser'], /Unknown option for this command: --browser/],
     [['save', '--wat'], /Unknown option for this command: --wat/],
     [['init'], /The init command moved: npm run bookmark -- vault init/],
-    [['vault'], /Usage: npm run bookmark -- vault init/],
+    [['vault'], /Usage: npm run bookmark -- vault COMMAND/],
     [['vault', 'git-help', '--full', '--full'], /Option may only be provided once/],
     [['vault', 'git-help', '--dry-run'], /--dry-run is only supported by vault open/],
     [['vault', 'open', '--full'], /--full is only supported by vault git-help/],
+    [['vault', 'tag-fix', '--from', 'wordpres'], /vault tag-fix --from TAG --to TAG/],
+    [['vault', 'tag-lint', '--apply'], /--from, --to, and --apply are only supported/],
     [['unknown'], /Unknown command: unknown/]
   ];
   for (const [arguments_, expected] of errorCases) {
@@ -165,6 +173,73 @@ test('TUI help wins consistently and argument errors are concise', async () => {
 
   const hyphenQuery = await run(process.execPath, [cli, 'find', '--', '-alpha'], { env });
   assert.equal(hyphenQuery.stdout.trim(), 'No bookmarks found for: -alpha');
+});
+
+test('vault tag maintenance reports, checks, previews, and applies reviewed fixes', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-cli-tag-maintenance-'));
+  const env = { ...process.env, BOOKMARK_VAULT: root };
+  delete env.BOOKMARK_RESULTS_HOST_VAULT;
+  await run(process.execPath, [cli, 'vault', 'init', '--no-skill'], { env });
+  const first = await saveBookmark({
+    url: 'https://example.test/tag-one', title: 'One', tags: ['wordpres', 'wordpress']
+  }, root);
+  const second = await saveBookmark({
+    url: 'https://example.test/tag-two', title: 'Two', tags: ['wordpres']
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/tag-three', title: 'Three', tags: ['wordpress']
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/tag-four', title: 'Four', tags: ['wordpress']
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/tag-five', title: 'Five', tags: ['wordpress']
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/tag-hobby', title: 'Hobby', tags: ['hobby']
+  }, root);
+  await saveBookmark({
+    url: 'https://example.test/tag-lobby', title: 'Lobby', tags: ['lobby']
+  }, root);
+
+  const lint = await run(process.execPath, [cli, 'vault', 'tag-lint'], { env });
+  assert.match(lint.stdout, /high-confidence: 1 possible typo pair across 4 tags/);
+  assert.match(lint.stdout, /wordpres -> wordpress \(distance 1\)/);
+  assert.doesNotMatch(lint.stdout, /hobby <-> lobby/);
+  assert.match(lint.stdout, new RegExp(first.id.slice(0, 8)));
+  assert.match(lint.stdout, /CANONICAL ALREADY IN SAME RECORD: yes/);
+  assert.doesNotMatch(lint.stdout, /FILE wordpres:/);
+
+  const full = await run(process.execPath, [cli, 'vault', 'tag-lint', '--full'], { env });
+  assert.match(full.stdout, /full audit: 2 possible typo pairs across 4 tags/);
+  assert.match(full.stdout, /hobby <-> lobby/);
+  assert.match(full.stdout, /FILE wordpres: bookmarks\/\d{4}\/\d{2}\//);
+  await assert.rejects(
+    () => run(process.execPath, [cli, 'vault', 'tag-lint', '--check'], { env }),
+    (error) => error.code === 1 && /Tag lint high-confidence/.test(error.stdout)
+  );
+
+  const before = await fs.readFile(second.file, 'utf8');
+  const preview = await run(process.execPath,
+    [cli, 'vault', 'tag-fix', '--from', 'wordpres', '--to', 'wordpress'], { env });
+  assert.match(preview.stdout, /Tag fix preview: wordpres -> wordpress/);
+  assert.match(preview.stdout, /No files changed\. Repeat with --apply/);
+  assert.equal(await fs.readFile(second.file, 'utf8'), before);
+
+  const applied = await run(process.execPath,
+    [cli, 'vault', 'tag-fix', '--from', 'wordpres', '--to', 'wordpress', '--apply'], { env });
+  assert.match(applied.stdout, /Tag fix applied/);
+  assert.match(applied.stdout, /Changed 2 bookmark files/);
+  assert.deepEqual(readList(await fs.readFile(first.file, 'utf8'), 'tags'), ['wordpress']);
+  assert.deepEqual(readList(await fs.readFile(second.file, 'utf8'), 'tags'), ['wordpress']);
+
+  const filteredCheck = await run(process.execPath, [cli, 'vault', 'tag-lint', '--check'], { env });
+  assert.match(filteredCheck.stdout, /no high-confidence typos/);
+  assert.match(filteredCheck.stdout, /Full audit has 1 lower-confidence near-match pair/);
+  await assert.rejects(
+    () => run(process.execPath, [cli, 'vault', 'tag-lint', '--full', '--check'], { env }),
+    (error) => error.code === 1 && /Tag lint full audit/.test(error.stdout)
+  );
 });
 
 test('vault commands render Git help and safe file-explorer commands', async () => {

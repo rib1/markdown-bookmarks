@@ -429,6 +429,35 @@ result directly; `--pick=2` is equivalent. Results are sorted by title so the
 numbering is stable. Use `open QUERY --dry-run` to print the selected URL
 without launching a browser.
 
+## Review and fix likely tag typos
+
+Scan tag names without changing the vault:
+
+```powershell
+npm run bookmark -- vault tag-lint
+```
+
+The default report is deliberately conservative. It shows punctuation-only
+variants, plus rare tags used at most three times when a similar canonical tag
+of at least four characters is used more than three times. Short acronyms and
+established tags are omitted from the default report. Use `--full` for a
+complete fuzzy audit with relative file paths; this may include valid near
+matches such as `hobby` and `lobby`. Reports include edit distance, usage
+counts, affected bookmark IDs, and whether both tags occur in one record.
+Use `--check` when a script should fail on warnings; it checks the default set,
+or the complete set when combined with `--full`.
+
+Preview one reviewed correction, then explicitly apply it:
+
+```powershell
+npm run bookmark -- vault tag-fix --from wordpres --to wordpress
+npm run bookmark -- vault tag-fix --from wordpres --to wordpress --apply
+```
+
+The canonical tag must already exist. Preview changes no files. When both tags
+occur in one bookmark, applying the fix removes the misspelled tag instead of
+creating a duplicate. The command never commits or pushes vault changes.
+
 ## Version the private vault
 
 Print a concise, copyable Git workflow for the configured vault:

@@ -65,12 +65,18 @@ test('basic command parsers reject unsupported arguments and honor help', () => 
   fails('unknown_option', () => parseSkillInstallArguments(['--tags', 'x']));
 });
 
-test('vault git help parser follows the shared option contract', () => {
+test('vault command parser follows the shared option contract', () => {
   assert.equal(parseVaultArguments(['init', '--path', '/vault']).path, '/vault');
   assert.equal(parseVaultArguments(['--no-skill', 'init']).noSkill, true);
   assert.equal(parseVaultArguments(['git-help']).full, false);
   assert.equal(parseVaultArguments(['--full', 'git-help']).full, true);
   assert.equal(parseVaultArguments(['open', '--dry-run']).dryRun, true);
+  assert.equal(parseVaultArguments(['tag-lint', '--full', '--check']).check, true);
+  assert.deepEqual(
+    { from: parseVaultArguments(['tag-fix', '--from', 'wordpres', '--to=wordpress']).from,
+      to: parseVaultArguments(['tag-fix', '--from', 'wordpres', '--to=wordpress']).to },
+    { from: 'wordpres', to: 'wordpress' }
+  );
   assert.equal(parseVaultArguments(['git-help', '--help', '--unknown']).help, true);
   fails('invalid_subcommand', () => parseVaultArguments([]));
   fails('invalid_subcommand', () => parseVaultArguments(['status']));
@@ -81,6 +87,12 @@ test('vault git help parser follows the shared option contract', () => {
   fails('unsupported_option', () => parseVaultArguments(['git-help', '--path', '/vault']));
   fails('unsupported_option', () => parseVaultArguments(['open', '--no-skill']));
   fails('unsupported_option', () => parseVaultArguments(['open', '--full']));
+  fails('missing_option', () => parseVaultArguments(['tag-fix', '--from', 'wordpres']));
+  fails('unsupported_option', () => parseVaultArguments(['tag-lint', '--apply']));
+  fails('unsupported_option', () => parseVaultArguments(['tag-fix', '--from', 'a', '--to', 'b', '--check']));
+  fails('unexpected_option_value', () => parseVaultArguments(['tag-lint', '--check=true']));
+  fails('duplicate_option', () => parseVaultArguments(['tag-fix', '--from', 'a', '--from', 'b', '--to', 'c']));
+  assert.equal(parseVaultArguments(['tag-fix', '--wat', '--help']).help, true);
   fails('extra_positional', () => parseVaultArguments(['git-help', 'extra']));
 });
 

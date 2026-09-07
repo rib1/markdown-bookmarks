@@ -20,6 +20,7 @@ import {
   openDirectory
 } from './vault-directory-launcher.js';
 import { isVaultInitialized } from './vault-state.js';
+import { fixVaultTags, lintVaultTags } from './tag-maintenance.js';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -109,6 +110,8 @@ function printVaultHelp(root, initialized = true) {
   console.log(`${initialization}Usage: npm run bookmark -- vault init [--path PATH] [--no-skill]
    or: npm run bookmark -- vault git-help [--full]
    or: npm run bookmark -- vault open [--dry-run]
+   or: npm run bookmark -- vault tag-lint [--full] [--check]
+   or: npm run bookmark -- vault tag-fix --from TAG --to TAG [--apply]
 
 No Git command is run and no network connection is made by git-help. Vault open
 uses the native file explorer; Docker prints a host command instead.
@@ -116,9 +119,65 @@ uses the native file explorer; Docker prints a host command instead.
 Options:
   --path PATH       Initialize this path instead of the configured vault.
   --no-skill        Do not install the vault-management LLM skill during init.
-  --full            Include initialization, remote-check, and conflict help.
+  --full            Show the complete detailed tag audit, or extended Git help.
   --dry-run         Print the native file-explorer command without running it.
+  --check           Return a failure status when tag-lint finds warnings.
+  --from TAG        Misspelled source tag for tag-fix.
+  --to TAG          Existing canonical tag for tag-fix.
+  --apply           Apply tag-fix; without it, only preview changes.
   --help, -h        Show this help.`);
+}
+
+function shortBookmarkId(record) {
+  return String(record.id).slice(0, 8);
+}
+
+function printTagLintReport(report, full) {
+  const candidates = full ? report.candidates : report.likelyCandidates;
+  if (!candidates.length) {
+    console.log(`Tag lint: no high-confidence typos across ${report.tagCount} tags.`);
+    if (!full && report.candidates.length) {
+      console.log(`Full audit has ${report.candidates.length} lower-confidence near-match pair${report.candidates.length === 1 ? '' : 's'}; rerun with --full.`);
+    }
+    return;
+  }
+  const scope = full ? 'full audit' : 'high-confidence';
+  console.log(`Tag lint ${scope}: ${candidates.length} possible typo pair${candidates.length === 1 ? '' : 's'} across ${report.tagCount} tags.`);
+  candidates.forEach((candidate, index) => {
+    const pair = candidate.source
+      ? `${candidate.source.tag} -> ${candidate.canonical.tag}`
+      : `${candidate.left.tag} <-> ${candidate.right.tag}`;
+    console.log(`${index + 1}. ${pair} (distance ${candidate.distance})`);
+    console.log(`   USES: ${candidate.left.tag}=${candidate.left.count}, ${candidate.right.tag}=${candidate.right.count}`);
+    console.log(`   IDS: ${candidate.left.tag}=[${candidate.left.records.map(shortBookmarkId).join(', ')}]; ${candidate.right.tag}=[${candidate.right.records.map(shortBookmarkId).join(', ')}]`);
+    console.log(`   CANONICAL ALREADY IN SAME RECORD: ${candidate.overlap.length ? `yes (${candidate.overlap.map(shortBookmarkId).join(', ')})` : 'no'}`);
+    if (full) {
+      for (const side of [candidate.left, candidate.right]) {
+        side.records.forEach((record) => console.log(`   FILE ${side.tag}: ${record.file}`));
+      }
+    }
+  });
+  console.log('Review every warning before changing tags.');
+}
+
+function printTagFixResult(result) {
+  if (!result.edits.length) {
+    console.log(`No bookmarks use tag: ${result.source}. No files changed.`);
+    return;
+  }
+  const replacements = result.edits.filter((edit) => edit.action === 'replace').length;
+  const removals = result.edits.length - replacements;
+  console.log(`Tag fix ${result.applied ? 'applied' : 'preview'}: ${result.source} -> ${result.canonical}`);
+  console.log(`Affected: ${result.edits.length}; replace: ${replacements}; remove duplicate: ${removals}`);
+  result.edits.forEach((edit, index) => {
+    console.log(`${index + 1}. ${shortBookmarkId(edit)} [${edit.action}] ${edit.file}`);
+  });
+  if (result.applied) {
+    console.log(`Changed ${result.changed.length} bookmark file${result.changed.length === 1 ? '' : 's'}.`);
+    console.log('Review the vault changes before committing them.');
+  } else {
+    console.log('No files changed. Repeat with --apply after review.');
+  }
 }
 
 async function openVaultDirectory(root, dryRun) {
@@ -254,6 +313,8 @@ function printHelp() {
   vault init [--path PATH] [--no-skill]
   vault git-help [--full]
   vault open [--dry-run]
+  vault tag-lint [--full] [--check]
+  vault tag-fix --from TAG --to TAG [--apply]
   save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
   find [QUERY] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
   open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
@@ -282,6 +343,7 @@ Common workflows:
   npm run bookmark -- vault init
   npm run bookmark -- vault git-help
   npm run bookmark -- vault open
+  npm run bookmark -- vault tag-lint
   npm run bookmark -- save --url https://example.test/page --shared-by Alice --via Signal
   npm run bookmark -- find database
   npm run bookmark -- open database --pick 3
@@ -367,7 +429,19 @@ async function runTui() {
       if (!initialized) {
         throw new Error(`Vault is not initialized at: ${root}\nFirst run: npm run bookmark -- vault init`);
       }
-      await openVaultDirectory(root, options.dryRun);
+      if (options.action === 'open') await openVaultDirectory(root, options.dryRun);
+      else if (options.action === 'tag-lint') {
+        const report = await lintVaultTags(root);
+        printTagLintReport(report, options.full);
+        const selectedCandidates = options.full ? report.candidates : report.likelyCandidates;
+        if (options.check && selectedCandidates.length) process.exitCode = 1;
+      } else {
+        printTagFixResult(await fixVaultTags(root, {
+          from: options.from,
+          to: options.to,
+          apply: options.apply
+        }));
+      }
     }
     return;
   }

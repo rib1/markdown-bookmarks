@@ -62,6 +62,7 @@ prototype sessions.
 - [ ] Add project and event creation/editing commands.
 - [ ] Add commands for adding and removing tags, contexts, projects, events,
       and relationships.
+- [x] Add reviewed tag typo linting and explicit fixes.
 - [ ] Add validation for frontmatter and stable IDs.
 - [x] Add versioned, idempotent migration handling for bookmark schema changes.
 - [ ] Add optional generated views for projects, contexts, events, unread items,

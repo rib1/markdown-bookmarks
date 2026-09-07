@@ -23,6 +23,7 @@ import { appendShareEvent, createShareEvent } from './share-history.js';
 import { appendCaptureEvent, createCaptureEvent } from './capture-history.js';
 import { vaultRoot } from './vault-path.js';
 import { searchCutoff } from './find-query.js';
+import { listBookmarkFiles } from './vault-bookmark-files.js';
 
 export { vaultRoot } from './vault-path.js';
 
@@ -176,36 +177,26 @@ function savedAfter(content, cutoff) {
 }
 
 export async function findBookmarks(query, root = vaultRoot(), { savedWithin, savedSince, fuzzy = false } = {}) {
-  const base = path.join(root, 'bookmarks');
   const results = [];
   const cutoff = searchCutoff({ savedWithin, savedSince });
-  async function walk(dir) {
-    let entries;
-    try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
-    for (const entry of entries) {
-      const target = path.join(dir, entry.name);
-      if (entry.isDirectory()) await walk(target);
-      else if (entry.name.endsWith('.md')) {
-        const content = await fs.readFile(target, 'utf8');
-        if (cutoff !== undefined && !savedAfter(content, cutoff)) continue;
-        if (content.toLowerCase().includes(query.toLowerCase())) {
-          results.push(fuzzy
-            ? { file: target, content, matchType: 'exact', matchScore: 1, matchedFields: ['content'] }
-            : { file: target, content });
-          continue;
-        }
-        if (!fuzzy) continue;
-        const match = fuzzyBookmarkMatch(query, content);
-        if (match) results.push({
-          file: target,
-          content,
-          matchType: 'fuzzy',
-          matchScore: match.score,
-          matchedFields: match.fields
-        });
-      }
+  for (const target of await listBookmarkFiles(root)) {
+    const content = await fs.readFile(target, 'utf8');
+    if (cutoff !== undefined && !savedAfter(content, cutoff)) continue;
+    if (content.toLowerCase().includes(query.toLowerCase())) {
+      results.push(fuzzy
+        ? { file: target, content, matchType: 'exact', matchScore: 1, matchedFields: ['content'] }
+        : { file: target, content });
+      continue;
     }
+    if (!fuzzy) continue;
+    const match = fuzzyBookmarkMatch(query, content);
+    if (match) results.push({
+      file: target,
+      content,
+      matchType: 'fuzzy',
+      matchScore: match.score,
+      matchedFields: match.fields
+    });
   }
-  await walk(base);
   return fuzzy ? sortSearchResults(results) : results;
 }

@@ -184,6 +184,8 @@ skill install [--path PATH]
 vault init [--path PATH] [--no-skill]
 vault git-help [--full]
 vault open [--dry-run]
+vault tag-lint [--full] [--check]
+vault tag-fix --from TAG --to TAG [--apply]
 save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
 find [QUERY] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
 open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
@@ -211,6 +213,24 @@ common initialization, synchronization, and conflict guidance.
 commands instead. `--dry-run` never launches an application.
 When the schema manifest is absent, vault help and Git help lead with
 `vault init`; `vault open` fails with the same actionable instruction.
+
+Tag linting reads only bookmark `tags`, builds case-insensitive per-record usage
+counts, and compares each distinct pair with plain Levenshtein distance. Allow
+distance 1 below 9 characters and distance 2 when the longer tag has at least 9
+characters. The default report is conservative: include punctuation-only
+variants, or an oriented pair whose source occurs at most three times, whose
+canonical tag occurs more than three times, and whose shorter tag has at least
+four characters. `--full` bypasses that confidence filter and adds relative
+paths. `--check` evaluates the selected default or full candidate set. Findings
+are warnings, never automatic normalization.
+
+`vault tag-fix` requires an existing canonical tag and a pair that passes the
+lint threshold. It previews by default and writes only with `--apply`. If both
+tags occur in a record, remove the misspelling; otherwise replace it. Preserve
+unrelated content and IDs, detect concurrent edits, and write each file
+atomically. Keep traversal, analysis, and maintenance in focused shared modules,
+not in `src/cli.js` or `src/vault.js`. No migration or Git operation belongs in
+this workflow.
 
 `find` prints compact, numbered terminal results containing title, short stable
 ID, URL, comma-separated tags, and optional fuzzy-match details. Results use
@@ -282,11 +302,12 @@ GitHub Dependabot checks npm, Docker, and GitHub Actions dependencies weekly.
 The `Quality` workflow runs ESLint and the complete test suite on every push and
 pull request. The `Credential scan` workflow runs Gitleaks on the same events.
 
-Tests must cover vault initialization, skill installation, CLI commands and
+Tests must cover vault initialization, skill installation, TUI commands and
 path resolution, save/find/open behavior, temporary search-page safety and
-cleanup, duplicate merging, time filters, GitHub/YouTube/Mural/Bandcamp/Imgur plugins, legacy
-enrichment, Chrome capture, and Markdown content. E2E tests must use ignored
-isolated test data, never the private vault.
+cleanup, duplicate merging, tag maintenance, time filters,
+GitHub/YouTube/Mural/Bandcamp/Imgur plugins, legacy enrichment, Chrome capture,
+and Markdown content. E2E tests must use ignored isolated test data, never the
+private vault.
 
 ## Release requirements
 

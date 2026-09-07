@@ -95,6 +95,15 @@ concepts distinct:
 
 Do not create semantic category directories.
 
+When reviewing tag spelling, compare only values in `tags` lists and report
+near matches with usage counts and affected relative files. A normal review may
+prioritize rare tags near an established spelling; a full audit should retain
+short, established, and otherwise lower-confidence pairs. Treat every match as
+a suggestion: distinct words can differ by one character. Never normalize
+near-matching tags automatically. If the user confirms a correction and both
+spellings occur in one record, remove the misspelling rather than creating a
+duplicate canonical tag.
+
 ## How to search
 
 1. Determine the requested scope: bookmarks, projects, events, or all records.
