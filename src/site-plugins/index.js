@@ -5,8 +5,9 @@ import confluence from './confluence.js';
 import jira from './jira.js';
 import bandcamp from './bandcamp.js';
 import imgur from './imgur.js';
+import hsFi from './hs-fi.js';
 
-const plugins = [github, youtube, mural, confluence, jira, bandcamp, imgur];
+const plugins = [github, youtube, mural, confluence, jira, bandcamp, imgur, hsFi];
 
 export function applySitePlugins(bookmark) {
   const url = new URL(bookmark.url);

@@ -50,6 +50,7 @@ prototype sessions.
 - [x] Document how to add a new site plugin.
 - [ ] Consider plugins for common article, PDF, podcast, and social sites.
 - [x] Add Confluence and Jira site metadata plugins and tests.
+- [x] Add Helsingin Sanomat (`hs.fi`) site metadata plugin and tests.
 
 ## Vault and data model
 

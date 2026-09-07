@@ -614,3 +614,24 @@ test('backfills Jira metadata on duplicate save', async () => {
   assert.match(content, /issue_key: "OPS-7"/);
   assert.match(content, /project_key: "OPS"/);
 });
+
+test('applies the Helsingin Sanomat plugin', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-hs-fi-'));
+  const saved = await saveBookmark({
+    url: 'https://www.hs.fi/politiikka/art-2000012345678.html', title: 'News article', tags: ['news']
+  }, root);
+  let content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /site: hs.fi/);
+  assert.match(content, /type: article/);
+  assert.match(content, /- "hs.fi"/);
+  assert.match(content, /- "news"/);
+
+  content = content.replace(/^type:.*\n|^site:.*\n/gm, '');
+  await fs.writeFile(saved.file, content, 'utf8');
+  await saveBookmark({ url: 'https://www.hs.fi/politiikka/art-2000012345678.html', title: 'News article' }, root);
+  content = await fs.readFile(saved.file, 'utf8');
+  assert.match(content, /site: "hs.fi"/);
+  assert.match(content, /type: "article"/);
+  assert.match(content, /- "hs.fi"/);
+  assert.match(content, /- "news"/);
+});

@@ -158,6 +158,8 @@ Site plugins are URL-driven, deterministic, and independently testable.
   Bandcamp subdomain when author is absent, and the `bandcamp` tag.
 - Imgur: add site, image/album/gallery type, Imgur resource ID, and the `imgur`
   tag for `imgur.com` and its subdomains.
+- Helsingin Sanomat: add `hs.fi` site, article type, and the `hs.fi` tag for
+  `hs.fi` and its subdomains.
 
 Keep each plugin in its own `src/site-plugins/<name>.js` module and register it
 in `src/site-plugins/index.js`. Test new records, duplicate saves, and legacy
