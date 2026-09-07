@@ -201,7 +201,10 @@ test('installs and refreshes vault AGENTS.md when migrations are checked', async
   assert.match(template, /device label defaults to the OS/);
   assert.match(template, /imgur_id/);
   assert.match(template, /Missing sender data is normal/);
-  assert.match(template, /never normalize\s+near-matching tags automatically/i);
+  assert.match(template, /## Fixing tags/);
+  assert.match(template, /Change a tag only after the user confirms/);
+  assert.match(template, /Keep tags lowercase and remove duplicates/);
+  assert.match(template, /Do not merge similar tags automatically/);
 
   await fs.writeFile(target, 'stale vault instructions\n', 'utf8');
   const second = await migrateVault(root);
