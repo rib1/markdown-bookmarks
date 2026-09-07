@@ -45,7 +45,7 @@ private-vault/
 ├── assets/<bookmark-id>/
 ├── views/                         # generated and disposable
 │   └── .search-results/           # temporary, Git-ignored HTML result pages
-└── .codex/skills/markdown-bookmark-vault/SKILL.md
+└── .codex/skills/markdown-bookmark-vault/SKILL.md  # optional explicit install
 ```
 
 Markdown is the source of truth. Search indexes, generated views, and caches
@@ -182,8 +182,8 @@ metadata enrichment.
 The TUI command entry point must support:
 
 ```text
-skill install [--path PATH]
-vault init [--path PATH] [--no-skill]
+vault skill-install [--path PATH]
+vault init [--path PATH]
 vault git-help [--full]
 vault open [--dry-run]
 vault tag-lint [--full] [--check]
@@ -273,8 +273,8 @@ BOOKMARK_VAULT -> VAULT_PATH -> ./vault
 
 ## LLM skill rules
 
-The generic skill source lives in the public repository. Installation must copy
-it into the selected private vault at:
+The generic skill is optional and is never installed by `vault init`. An
+explicit `vault skill-install` copies it into the selected private vault at:
 
 ```text
 .codex/skills/markdown-bookmark-vault/SKILL.md
@@ -287,8 +287,8 @@ and never commit or push Git changes without explicit instruction.
 The canonical cross-tool instructions live at `templates/vault/AGENTS.md` and
 are synchronized to the vault root whenever migrations are checked. Update that
 template whenever vault layout, schema fields, relationships, search behavior,
-or safety rules change. Tests must verify both initial installation and refresh
-of stale instructions.
+or safety rules change. The managed file must be versioned in the private vault.
+Tests must verify both initial installation and refresh of stale instructions.
 
 ## Testing contract
 

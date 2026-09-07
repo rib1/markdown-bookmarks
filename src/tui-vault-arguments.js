@@ -4,7 +4,6 @@ const vaultOptions = {
   '--full': { key: 'full', type: 'boolean' },
   '--dry-run': { key: 'dryRun', type: 'boolean' },
   '--path': { key: 'path', type: 'value', valueLabel: 'a vault path' },
-  '--no-skill': { key: 'noSkill', type: 'boolean' },
   '--check': { key: 'check', type: 'boolean' },
   '--from': { key: 'from', type: 'value', valueLabel: 'a source tag' },
   '--to': { key: 'to', type: 'value', valueLabel: 'a canonical tag' },
@@ -15,7 +14,7 @@ export function parseVaultArguments(args) {
   const parsed = parseTuiArguments(args, { options: vaultOptions, maximumPositionals: 1 });
   if (parsed.help) return parsed;
   const [action] = parsed.positionals;
-  if (!['init', 'git-help', 'open', 'tag-lint', 'tag-fix'].includes(action)) {
+  if (!['init', 'skill-install', 'git-help', 'open', 'tag-lint', 'tag-fix'].includes(action)) {
     throw argumentError('invalid_subcommand', 'Usage: npm run bookmark -- vault COMMAND [options]. Run vault --help.');
   }
   if (!['git-help', 'tag-lint'].includes(action) && parsed.full) {
@@ -24,11 +23,8 @@ export function parseVaultArguments(args) {
   if (action !== 'open' && parsed.dryRun) {
     throw argumentError('unsupported_option', '--dry-run is only supported by vault open');
   }
-  if (action !== 'init' && parsed.path) {
-    throw argumentError('unsupported_option', '--path is only supported by vault init');
-  }
-  if (action !== 'init' && parsed.noSkill) {
-    throw argumentError('unsupported_option', '--no-skill is only supported by vault init');
+  if (!['init', 'skill-install'].includes(action) && parsed.path) {
+    throw argumentError('unsupported_option', '--path is only supported by vault init and vault skill-install');
   }
   if (action !== 'tag-lint' && parsed.check) {
     throw argumentError('unsupported_option', '--check is only supported by vault tag-lint');

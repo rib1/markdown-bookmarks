@@ -4,7 +4,7 @@ import { parseTuiArguments, TuiArgumentError } from '../src/tui-arguments.js';
 import { FindQueryError } from '../src/find-query.js';
 import { parseFindArguments } from '../src/tui-find-arguments.js';
 import { parseOpenArguments } from '../src/tui-open-arguments.js';
-import { parseSaveArguments, parseSkillInstallArguments } from '../src/tui-basic-arguments.js';
+import { parseSaveArguments } from '../src/tui-basic-arguments.js';
 import { parseVaultArguments } from '../src/tui-vault-arguments.js';
 
 function fails(code, action) {
@@ -60,14 +60,12 @@ test('find and open parsers enforce strict dates and command-specific options', 
 
 test('basic command parsers reject unsupported arguments and honor help', () => {
   assert.equal(parseSaveArguments(['--url=https://example.test']).url, 'https://example.test');
-  assert.equal(parseSkillInstallArguments(['--help', '--unknown']).help, true);
   fails('missing_option', () => parseSaveArguments([]));
-  fails('unknown_option', () => parseSkillInstallArguments(['--tags', 'x']));
 });
 
 test('vault command parser follows the shared option contract', () => {
   assert.equal(parseVaultArguments(['init', '--path', '/vault']).path, '/vault');
-  assert.equal(parseVaultArguments(['--no-skill', 'init']).noSkill, true);
+  assert.equal(parseVaultArguments(['skill-install', '--path', '/vault']).path, '/vault');
   assert.equal(parseVaultArguments(['git-help']).full, false);
   assert.equal(parseVaultArguments(['--full', 'git-help']).full, true);
   assert.equal(parseVaultArguments(['open', '--dry-run']).dryRun, true);
@@ -85,7 +83,7 @@ test('vault command parser follows the shared option contract', () => {
   fails('unexpected_option_value', () => parseVaultArguments(['git-help', '--full=true']));
   fails('unsupported_option', () => parseVaultArguments(['git-help', '--dry-run']));
   fails('unsupported_option', () => parseVaultArguments(['git-help', '--path', '/vault']));
-  fails('unsupported_option', () => parseVaultArguments(['open', '--no-skill']));
+  fails('unknown_option', () => parseVaultArguments(['init', '--no-skill']));
   fails('unsupported_option', () => parseVaultArguments(['open', '--full']));
   fails('missing_option', () => parseVaultArguments(['tag-fix', '--from', 'wordpres']));
   fails('unsupported_option', () => parseVaultArguments(['tag-lint', '--apply']));

@@ -11,7 +11,7 @@ import { CANCELLED_SELECTION, interactiveResult, pickedResult } from './open-sel
 import { readList } from './bookmark-format.js';
 import { parseFindArguments } from './tui-find-arguments.js';
 import { parseOpenArguments } from './tui-open-arguments.js';
-import { parseSaveArguments, parseSkillInstallArguments } from './tui-basic-arguments.js';
+import { parseSaveArguments } from './tui-basic-arguments.js';
 import { parseVaultArguments } from './tui-vault-arguments.js';
 import { renderVaultGitHelp } from './vault-git-help.js';
 import {
@@ -79,16 +79,6 @@ async function launchBrowserOrExplain(target, browser, { linkAlreadyPrinted = fa
   }
 }
 
-function printSkillHelp() {
-  console.log(`Usage: npm run bookmark -- skill install [options]
-
-Install or refresh the vault-management LLM skill.
-
-Options:
-  --path PATH       Install into this vault path instead of the configured default.
-  --help, -h        Show this help.`);
-}
-
 function printSaveHelp() {
   console.log(`Usage: npm run bookmark -- save --url URL [options]
 
@@ -107,7 +97,8 @@ function printVaultHelp(root, initialized = true) {
   const initialization = initialized
     ? ''
     : `No initialized bookmark vault was found at ${root}.\nFirst run: npm run bookmark -- vault init\n\n`;
-  console.log(`${initialization}Usage: npm run bookmark -- vault init [--path PATH] [--no-skill]
+  console.log(`${initialization}Usage: npm run bookmark -- vault init [--path PATH]
+   or: npm run bookmark -- vault skill-install [--path PATH]
    or: npm run bookmark -- vault git-help [--full]
    or: npm run bookmark -- vault open [--dry-run]
    or: npm run bookmark -- vault tag-lint [--full] [--check]
@@ -117,8 +108,7 @@ No Git command is run and no network connection is made by git-help. Vault open
 uses the native file explorer; Docker prints a host command instead.
 
 Options:
-  --path PATH       Initialize this path instead of the configured vault.
-  --no-skill        Do not install the vault-management LLM skill during init.
+  --path PATH       Select a path for init or skill-install.
   --full            Show the complete detailed tag audit, or extended Git help.
   --dry-run         Print the native file-explorer command without running it.
   --check           Return a failure status when tag-lint finds warnings.
@@ -309,8 +299,8 @@ so the Docker command prints the selected URL for opening on the host.`);
 
 function printHelp() {
   console.log(`Markdown Bookmarks commands:
-  skill install [--path PATH]
-  vault init [--path PATH] [--no-skill]
+  vault init [--path PATH]
+  vault skill-install [--path PATH]
   vault git-help [--full]
   vault open [--dry-run]
   vault tag-lint [--full] [--check]
@@ -341,6 +331,7 @@ QUERY may be omitted when --saved-within or --saved-since is provided.
 
 Common workflows:
   npm run bookmark -- vault init
+  npm run bookmark -- vault skill-install
   npm run bookmark -- vault git-help
   npm run bookmark -- vault open
   npm run bookmark -- vault tag-lint
@@ -382,12 +373,14 @@ async function chooseOpenResult(results, requestedPick) {
 }
 
 async function printNamedHelp(name) {
+  if (name === 'skill') {
+    throw new Error('The skill command moved: npm run bookmark -- vault skill-install [--path PATH]');
+  }
   if (name === 'vault') {
     const root = vaultRoot();
     return printVaultHelp(root, await isVaultInitialized(root));
   }
   const printers = {
-    skill: printSkillHelp,
     save: printSaveHelp,
     find: printFindHelp,
     open: printOpenHelp
@@ -405,13 +398,7 @@ async function runTui() {
   }
   if (command === 'init') throw new Error('The init command moved: npm run bookmark -- vault init [options]');
   if (command === 'skill') {
-    if (args.some((argument) => argument === '--help' || argument === '-h')) return printSkillHelp();
-    if (args[0] !== 'install') throw new Error('Usage: npm run bookmark -- skill install [--path PATH]');
-    const options = parseSkillInstallArguments(args.slice(1));
-    const root = options.path || vaultRoot();
-    const target = await installVaultSkill(root);
-    console.log(`LLM skill installed in vault: ${target}`);
-    return;
+    throw new Error('The skill command moved: npm run bookmark -- vault skill-install [--path PATH]');
   }
   if (command === 'vault') {
     const options = parseVaultArguments(args);
@@ -419,9 +406,8 @@ async function runTui() {
     const initialized = await isVaultInitialized(root);
     if (options.help) return printVaultHelp(root, initialized);
     if (options.action === 'init') {
-      await initVault(root, { installSkill: !options.noSkill });
+      await initVault(root);
       console.log(`Vault ready: ${root}`);
-      if (!options.noSkill) console.log('LLM skill installed: .codex/skills/markdown-bookmark-vault/SKILL.md');
       console.log('Next: git -C "' + root + '" init');
     } else if (options.action === 'git-help') {
       console.log(renderVaultGitHelp(root, { full: options.full, initialized }));
@@ -429,7 +415,10 @@ async function runTui() {
       if (!initialized) {
         throw new Error(`Vault is not initialized at: ${root}\nFirst run: npm run bookmark -- vault init`);
       }
-      if (options.action === 'open') await openVaultDirectory(root, options.dryRun);
+      if (options.action === 'skill-install') {
+        const target = await installVaultSkill(root);
+        console.log(`LLM skill installed in vault: ${target}`);
+      } else if (options.action === 'open') await openVaultDirectory(root, options.dryRun);
       else if (options.action === 'tag-lint') {
         const report = await lintVaultTags(root);
         printTagLintReport(report, options.full);

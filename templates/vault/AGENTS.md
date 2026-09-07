@@ -7,6 +7,8 @@ its own.
 This file is managed by the Markdown Bookmarks companion and may be refreshed
 when the companion starts. Put additional user-specific instructions in
 `AGENTS.local.md`; read that file too when it exists.
+Keep this managed `AGENTS.md` versioned in the private vault so its instructions
+stay consistent across machines.
 
 ## Work without tool assumptions
 

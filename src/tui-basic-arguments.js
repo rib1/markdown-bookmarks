@@ -7,18 +7,10 @@ const saveOptions = {
   '--shared-by': { key: 'sharedBy', type: 'value', valueLabel: 'a sender name' },
   '--via': { key: 'via', type: 'value', valueLabel: 'a channel' }
 };
-const skillOptions = {
-  '--path': { key: 'path', type: 'value', valueLabel: 'a vault path' }
-};
-
 export function parseSaveArguments(args) {
   const parsed = parseTuiArguments(args, { options: saveOptions });
   if (!parsed.help && !parsed.url) {
     throw argumentError('missing_option', 'Usage: npm run bookmark -- save --url URL [options]');
   }
   return parsed;
-}
-
-export function parseSkillInstallArguments(args) {
-  return parseTuiArguments(args, { options: skillOptions });
 }

@@ -33,39 +33,32 @@ test('uses the Docker VAULT_PATH when BOOKMARK_VAULT is not set', { concurrency:
   }
 });
 
-test('initializes a vault and installs the LLM skill without overwriting README', async () => {
+test('initializes a vault with AGENTS.md but without the optional skill', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-vault-'));
-  const previousSkillSource = process.env.SKILL_SOURCE;
-  process.env.SKILL_SOURCE = path.resolve('skills', 'markdown-bookmark-vault', 'SKILL.md');
-  try {
-    await initVault(root);
-    for (const directory of ['bookmarks', 'projects', 'events', 'assets', 'views']) {
-      const stat = await fs.stat(path.join(root, directory));
-      assert.equal(stat.isDirectory(), true);
-    }
-    const readme = path.join(root, 'README.md');
-    const attributes = path.join(root, '.gitattributes');
-    const ignore = path.join(root, '.gitignore');
-    const schema = path.join(root, '.markdown-bookmarks.json');
-    const vaultAgents = path.join(root, 'AGENTS.md');
-    const skill = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
-    assert.equal(await fs.readFile(attributes, 'utf8'), '* text=auto eol=lf\n');
-    assert.equal(await fs.readFile(ignore, 'utf8'), '.DS_Store\n/views/.search-results/\n');
-    assert.deepEqual(JSON.parse(await fs.readFile(schema, 'utf8')), { schema_version: BOOKMARK_SCHEMA_VERSION });
-    const readmeContent = await fs.readFile(readme, 'utf8');
-    assert.match(readmeContent, /# Private bookmark vault/);
-    assert.match(readmeContent, /`bookmarks\/`/);
-    assert.match(readmeContent, /`\.codex\/skills\/`/);
-    assert.equal(await fs.readFile(vaultAgents, 'utf8'),
-      await fs.readFile(path.resolve('templates', 'vault', 'AGENTS.md'), 'utf8'));
-    assert.match(await fs.readFile(skill, 'utf8'), /Markdown bookmark vault/);
-    await fs.writeFile(readme, 'my custom vault README\n', 'utf8');
-    await initVault(root);
-    assert.equal(await fs.readFile(readme, 'utf8'), 'my custom vault README\n');
-  } finally {
-    if (previousSkillSource === undefined) delete process.env.SKILL_SOURCE;
-    else process.env.SKILL_SOURCE = previousSkillSource;
+  await initVault(root);
+  for (const directory of ['bookmarks', 'projects', 'events', 'assets', 'views']) {
+    const stat = await fs.stat(path.join(root, directory));
+    assert.equal(stat.isDirectory(), true);
   }
+  const readme = path.join(root, 'README.md');
+  const attributes = path.join(root, '.gitattributes');
+  const ignore = path.join(root, '.gitignore');
+  const schema = path.join(root, '.markdown-bookmarks.json');
+  const vaultAgents = path.join(root, 'AGENTS.md');
+  const skill = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
+  assert.equal(await fs.readFile(attributes, 'utf8'), '* text=auto eol=lf\n');
+  assert.equal(await fs.readFile(ignore, 'utf8'), '.DS_Store\n/views/.search-results/\n');
+  assert.deepEqual(JSON.parse(await fs.readFile(schema, 'utf8')), { schema_version: BOOKMARK_SCHEMA_VERSION });
+  const readmeContent = await fs.readFile(readme, 'utf8');
+  assert.match(readmeContent, /# Private bookmark vault/);
+  assert.match(readmeContent, /`bookmarks\/`/);
+  assert.doesNotMatch(readmeContent, /\.codex\/skills/);
+  assert.equal(await fs.readFile(vaultAgents, 'utf8'),
+    await fs.readFile(path.resolve('templates', 'vault', 'AGENTS.md'), 'utf8'));
+  await assert.rejects(() => fs.access(skill), { code: 'ENOENT' });
+  await fs.writeFile(readme, 'my custom vault README\n', 'utf8');
+  await initVault(root);
+  assert.equal(await fs.readFile(readme, 'utf8'), 'my custom vault README\n');
 });
 
 test('migrates legacy save attributes and repairs definite tag contamination once', async () => {
@@ -205,6 +198,7 @@ test('installs and refreshes vault AGENTS.md when migrations are checked', async
   assert.match(template, /Change a tag only after the user confirms/);
   assert.match(template, /Keep tags lowercase and remove duplicates/);
   assert.match(template, /Do not merge similar tags automatically/);
+  assert.match(template, /Keep this managed `AGENTS\.md` versioned in the private vault/);
 
   await fs.writeFile(target, 'stale vault instructions\n', 'utf8');
   const second = await migrateVault(root);

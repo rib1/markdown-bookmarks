@@ -59,7 +59,7 @@ prototype sessions.
       rather than semantic directories.
 - [x] Support typed relationships between bookmarks.
 - [x] Generate a short vault README during initialization.
-- [x] Install the vault-management LLM skill during initialization.
+- [x] Install the tool-independent `AGENTS.md` during initialization.
 - [ ] Add project and event creation/editing commands.
 - [ ] Add commands for adding and removing tags, contexts, projects, events,
       and relationships.
@@ -115,7 +115,7 @@ prototype sessions.
 ## LLM integration
 
 - [x] Add `skills/markdown-bookmark-vault/SKILL.md`.
-- [x] Make vault initialization install the skill under `.codex/skills/`.
+- [x] Keep Codex skill installation explicit and optional under `.codex/skills/`.
 - [ ] Add examples for common vault questions and review workflows.
 - [ ] Add explicit read-only and edit modes to the skill guidance.
 - [ ] Decide whether summaries remain manual/deterministic or support optional

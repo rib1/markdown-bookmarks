@@ -35,7 +35,7 @@ export async function installVaultSkill(root) {
   return target;
 }
 
-export async function initVault(root, { installSkill = true } = {}) {
+export async function initVault(root) {
   await Promise.all(['bookmarks', 'projects', 'events', 'assets', 'views'].map((name) =>
     fs.mkdir(path.join(root, name), { recursive: true })));
   const attributes = path.join(root, '.gitattributes');
@@ -62,7 +62,6 @@ export async function initVault(root, { installSkill = true } = {}) {
       '- `assets/` - optional saved page content and images',
       '- `views/` - optional generated lists and searches',
       '- `AGENTS.md` - companion-managed instructions for LLM agents working in this vault',
-      '- `.codex/skills/` - LLM instructions for working safely with this vault',
       `- \`${VAULT_SCHEMA_FILE}\` - vault schema version used for automatic migrations`,
       '',
       'Markdown files are the source of truth. Search indexes and generated views can',
@@ -70,9 +69,6 @@ export async function initVault(root, { installSkill = true } = {}) {
       ''
     ].join('\n');
     await fs.writeFile(readme, vaultReadme, 'utf8');
-  }
-  if (installSkill) {
-    await installVaultSkill(root);
   }
   await migrateVault(root);
   return root;

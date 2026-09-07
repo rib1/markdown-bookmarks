@@ -54,7 +54,9 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /--saved-within day\|week\|month\|year/);
   assert.match(generalHelp.stdout, /--saved-since YYYY-MM-DD/);
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
-  assert.match(generalHelp.stdout, /vault init \[--path PATH\] \[--no-skill\]/);
+  assert.match(generalHelp.stdout, /vault init \[--path PATH\]/);
+  assert.match(generalHelp.stdout, /vault skill-install \[--path PATH\]/);
+  assert.doesNotMatch(generalHelp.stdout, /^\s*skill install/m);
   assert.match(generalHelp.stdout, /vault git-help \[--full\]/);
   assert.match(generalHelp.stdout, /vault open \[--dry-run\]/);
   assert.match(generalHelp.stdout, /vault tag-lint \[--full\] \[--check\]/);
@@ -111,6 +113,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /Docker cannot launch a host application/);
 
   const vaultHelp = await run(process.execPath, [cli, 'vault', '--help']);
+  assert.match(vaultHelp.stdout, /vault skill-install \[--path PATH\]/);
   assert.match(vaultHelp.stdout, /vault git-help \[--full\]/);
   assert.match(vaultHelp.stdout, /vault open \[--dry-run\]/);
   assert.match(vaultHelp.stdout, /vault tag-lint \[--full\] \[--check\]/);
@@ -126,8 +129,8 @@ test('TUI help wins consistently and argument errors are concise', async () => {
     [['find', 'alpha', '--wat', '--help'], /Usage: npm run bookmark -- find QUERY/],
     [['open', 'alpha', '--help'], /Find a bookmark and open its HTTP\/HTTPS URL/],
     [['save', '--wat', '--help'], /Save one HTTP\/HTTPS bookmark through the TUI/],
-    [['vault', 'init', 'unexpected', '-h'], /vault init \[--path PATH\] \[--no-skill\]/],
-    [['skill', 'unknown', '--help'], /Install or refresh the vault-management LLM skill/],
+    [['vault', 'init', 'unexpected', '-h'], /vault init \[--path PATH\]/],
+    [['vault', 'skill-install', '--help'], /vault skill-install \[--path PATH\]/],
     [['vault', 'unknown', '--wat', '--help'], /vault git-help \[--full\]/],
     [['vault', 'tag-fix', '--wat', '--help'], /vault tag-lint \[--full\]/],
     [['help', 'find'], /--saved-since DATE/]
@@ -152,6 +155,8 @@ test('TUI help wins consistently and argument errors are concise', async () => {
     [['open', 'alpha', '--browser'], /Unknown option for this command: --browser/],
     [['save', '--wat'], /Unknown option for this command: --wat/],
     [['init'], /The init command moved: npm run bookmark -- vault init/],
+    [['skill', 'install'], /The skill command moved: npm run bookmark -- vault skill-install/],
+    [['vault', 'skill-install'], /First run: npm run bookmark -- vault init/],
     [['vault'], /Usage: npm run bookmark -- vault COMMAND/],
     [['vault', 'git-help', '--full', '--full'], /Option may only be provided once/],
     [['vault', 'git-help', '--dry-run'], /--dry-run is only supported by vault open/],
@@ -179,7 +184,7 @@ test('vault tag maintenance reports, checks, previews, and applies reviewed fixe
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-cli-tag-maintenance-'));
   const env = { ...process.env, BOOKMARK_VAULT: root };
   delete env.BOOKMARK_RESULTS_HOST_VAULT;
-  await run(process.execPath, [cli, 'vault', 'init', '--no-skill'], { env });
+  await run(process.execPath, [cli, 'vault', 'init'], { env });
   const first = await saveBookmark({
     url: 'https://example.test/tag-one', title: 'One', tags: ['wordpres', 'wordpress']
   }, root);
@@ -377,7 +382,10 @@ test('TUI commands initialize, save, find, install the vault skill, and dry-run 
   delete env.BOOKMARK_RESULTS_DIR;
   const initialized = await run(process.execPath, [cli, 'vault', 'init', '--path', root], { env });
   assert.match(initialized.stdout, /Vault ready/);
+  assert.doesNotMatch(initialized.stdout, /skill installed/i);
   assert.match(await fs.readFile(path.join(root, 'AGENTS.md'), 'utf8'), /How to search/);
+  const skillPath = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
+  await assert.rejects(() => fs.access(skillPath), { code: 'ENOENT' });
 
   const emptyBrowserSearch = await run(process.execPath,
     [cli, 'find', 'triper', '--browser'], { env });
@@ -531,6 +539,7 @@ test('TUI commands initialize, save, find, install the vault skill, and dry-run 
   assert.match(dockerBrowserSearch.stdout,
     /Search results file:\nfile:\/\/\/C:\/Users\/me\/My%20Vault\/views\/\.search-results\/search-results-[\da-f-]+\.html/);
 
-  const installed = await run(process.execPath, [cli, 'skill', 'install', '--path', root], { env });
+  const installed = await run(process.execPath, [cli, 'vault', 'skill-install', '--path', root], { env });
   assert.match(installed.stdout, new RegExp(`${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*SKILL\\.md`));
+  assert.equal((await fs.stat(skillPath)).isFile(), true);
 });

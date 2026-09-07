@@ -56,29 +56,24 @@ The command creates the standard vault directories, a README, and a
 `.gitattributes` file that normalizes text files to Unix LF line endings. It
 does not overwrite those existing files. It installs a companion-managed
 `AGENTS.md` in the vault root with portable structure, privacy, editing, and
-search instructions for LLM agents. It also installs the generic vault-management
-LLM skill at `.codex/skills/markdown-bookmark-vault/SKILL.md`. Use `--no-skill`
-if you do not want the optional skill copied into the vault; `AGENTS.md` is
-still installed.
+search instructions for LLM agents. Keep `AGENTS.md` versioned in the private
+vault so every machine receives the same instructions.
 
-For an existing vault, install or refresh only the vault-local skill with:
+Optionally install the Codex-specific vault skill with:
 
 ```bash
-docker compose run --rm bookmarkd node src/cli.js skill install
+docker compose run --rm bookmarkd node src/cli.js vault skill-install
 ```
 
-The public application’s `skills/` directory is only the source template; the
-usable copy for your bookmarks is inside the private vault.
+This explicit command installs the skill inside the private vault. Vault
+initialization does not install it because `AGENTS.md` is the default,
+tool-independent instruction source.
 
 ## Use the vault with an LLM
 
-The repository includes a reusable Codex skill at
-`skills/markdown-bookmark-vault/`. Copy that directory into your local Codex
-skills directory, then open the private vault in the same workspace or provide
-its path when asking the LLM to work with it.
-
-The skill preserves stable IDs, distinguishes suggestions from confirmed edits,
-protects private content, and avoids unrequested Git commits or pushes.
+Open the private vault in an LLM tool that reads its root `AGENTS.md`. No skill
+or application source checkout is required. The optional Codex skill adds
+discovery but still treats `AGENTS.md` as the canonical instructions.
 
 ## Start the companion
 
