@@ -56,6 +56,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
   assert.match(generalHelp.stdout, /vault init \[--path PATH\]/);
   assert.match(generalHelp.stdout, /vault skill-install \[--path PATH\]/);
+  assert.match(generalHelp.stdout, /vault status/);
   assert.doesNotMatch(generalHelp.stdout, /^\s*skill install/m);
   assert.match(generalHelp.stdout, /vault git-help \[--full\]/);
   assert.match(generalHelp.stdout, /vault open \[--dry-run\]/);
@@ -114,6 +115,8 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
 
   const vaultHelp = await run(process.execPath, [cli, 'vault', '--help']);
   assert.match(vaultHelp.stdout, /vault skill-install \[--path PATH\]/);
+  assert.match(vaultHelp.stdout, /vault status/);
+  assert.match(vaultHelp.stdout, /last fetched upstream checkpoint/);
   assert.match(vaultHelp.stdout, /vault git-help \[--full\]/);
   assert.match(vaultHelp.stdout, /vault open \[--dry-run\]/);
   assert.match(vaultHelp.stdout, /vault tag-lint \[--full\] \[--check\]/);
@@ -157,6 +160,7 @@ test('TUI help wins consistently and argument errors are concise', async () => {
     [['init'], /The init command moved: npm run bookmark -- vault init/],
     [['skill', 'install'], /The skill command moved: npm run bookmark -- vault skill-install/],
     [['vault', 'skill-install'], /First run: npm run bookmark -- vault init/],
+    [['vault', 'status'], /First run: npm run bookmark -- vault init/],
     [['vault'], /Usage: npm run bookmark -- vault COMMAND/],
     [['vault', 'git-help', '--full', '--full'], /Option may only be provided once/],
     [['vault', 'git-help', '--dry-run'], /--dry-run is only supported by vault open/],
@@ -291,6 +295,16 @@ test('vault commands render Git help and safe file-explorer commands', async () 
     BOOKMARK_RESULTS_HOST_VAULT: 'C:\\Users\\example\\Bookmark Vault'
   };
   delete dockerEnv.BOOKMARK_VAULT;
+  const dockerHelp = await run(process.execPath, [cli, 'vault', '--help'], { env: dockerEnv });
+  assert.match(dockerHelp.stdout,
+    /Usage: docker compose exec bookmarkd node src\/cli\.js vault init \[--path PATH\]/);
+  const dockerGitHelp = await run(process.execPath, [cli, 'vault', 'git-help'], { env: dockerEnv });
+  assert.match(dockerGitHelp.stdout, /Vault \(host\): C:\\Users\\example\\Bookmark Vault/);
+  assert.match(dockerGitHelp.stdout, new RegExp(`Vault \\(container\\): ${root.replaceAll('\\', '\\\\')}`));
+  assert.match(dockerGitHelp.stdout, /git -C "C:\\Users\\example\\Bookmark Vault" status --short/);
+  assert.match(dockerGitHelp.stdout,
+    /More help: docker compose exec bookmarkd node src\/cli\.js vault git-help --full/);
+  assert.doesNotMatch(dockerGitHelp.stdout, new RegExp(`git -C "${root.replaceAll('\\', '\\\\')}"`));
   const dockerOpen = await run(process.execPath, [cli, 'vault', 'open'], { env: dockerEnv });
   assert.match(dockerOpen.stdout, /Open the vault on the host:/);
   assert.match(dockerOpen.stdout, /explorer\.exe "C:\\Users\\example\\Bookmark Vault"/);
@@ -401,6 +415,30 @@ test('TUI commands initialize, save, find, install the vault skill, and dry-run 
   assert.ok(savedId);
   assert.match(savedContent, /"sender":"Alice"/);
   assert.match(savedContent, /"channel":"Signal"/);
+
+  const vaultStatus = await run(process.execPath, [cli, 'vault', 'status'], { env });
+  assert.match(vaultStatus.stdout, /Bookmark vault status/);
+  assert.match(vaultStatus.stdout, /Bookmarks: 1/);
+  assert.match(vaultStatus.stdout, /Schema: 2 \(current\)/);
+  assert.match(vaultStatus.stdout, /Record checks: passed \(IDs, URLs, saved dates, duplicate IDs\/URLs\)/);
+  assert.match(vaultStatus.stdout, /Git: not initialized/);
+  assert.match(vaultStatus.stdout, /See vault Git help: npm run bookmark -- vault git-help/);
+  assert.match(vaultStatus.stdout, new RegExp(`Vault: ${root.replaceAll('\\', '\\\\')}`));
+  assert.doesNotMatch(vaultStatus.stdout, /Vault \(container\):/);
+
+  const dockerStatusEnv = {
+    ...env,
+    VAULT_PATH: root,
+    BOOKMARK_RESULTS_HOST_VAULT: 'C:\\Users\\example\\Bookmark Vault'
+  };
+  delete dockerStatusEnv.BOOKMARK_VAULT;
+  const dockerVaultStatus = await run(process.execPath, [cli, 'vault', 'status'], { env: dockerStatusEnv });
+  assert.match(dockerVaultStatus.stdout, /Vault \(host\): C:\\Users\\example\\Bookmark Vault/);
+  assert.match(dockerVaultStatus.stdout, new RegExp(`Vault \\(container\\): ${root.replaceAll('\\', '\\\\')}`));
+  assert.doesNotMatch(dockerVaultStatus.stdout, /^Vault: /m);
+  assert.match(dockerVaultStatus.stdout,
+    /See vault Git help: docker compose exec bookmarkd node src\/cli\.js vault git-help/);
+  assert.doesNotMatch(dockerVaultStatus.stdout, /See vault Git help: npm run/);
 
   const found = await run(process.execPath, [cli, 'find', 'amiga'], { env });
   assert.match(found.stdout, new RegExp(`^1\\. CLI Amiga \\[${savedId.slice(0, 8)}\\]$`, 'm'));

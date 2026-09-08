@@ -184,6 +184,7 @@ The TUI command entry point must support:
 ```text
 vault skill-install [--path PATH]
 vault init [--path PATH]
+vault status
 vault git-help [--full]
 vault open [--dry-run]
 vault tag-lint [--full] [--check]
@@ -196,6 +197,11 @@ open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since Y
 All npm examples must include the argument separator:
 `npm run bookmark -- COMMAND`. Without `--`, npm may consume CLI options such
 as `--browser` or `--fuzzy` instead of forwarding them.
+
+Vault-specific help must adapt to its execution environment. Native output uses
+`npm run bookmark --`; Docker output uses `docker compose exec bookmarkd node
+src/cli.js`, labels host and container vault paths, and prints host Git commands
+against the host path rather than `/vault`.
 
 The `find` query may be omitted when `--saved-within` or `--saved-since`
 narrows the results. Bare `find` remains invalid to avoid accidentally printing

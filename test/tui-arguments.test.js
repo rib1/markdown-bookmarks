@@ -66,6 +66,7 @@ test('basic command parsers reject unsupported arguments and honor help', () => 
 test('vault command parser follows the shared option contract', () => {
   assert.equal(parseVaultArguments(['init', '--path', '/vault']).path, '/vault');
   assert.equal(parseVaultArguments(['skill-install', '--path', '/vault']).path, '/vault');
+  assert.equal(parseVaultArguments(['status']).action, 'status');
   assert.equal(parseVaultArguments(['git-help']).full, false);
   assert.equal(parseVaultArguments(['--full', 'git-help']).full, true);
   assert.equal(parseVaultArguments(['open', '--dry-run']).dryRun, true);
@@ -77,12 +78,12 @@ test('vault command parser follows the shared option contract', () => {
   );
   assert.equal(parseVaultArguments(['git-help', '--help', '--unknown']).help, true);
   fails('invalid_subcommand', () => parseVaultArguments([]));
-  fails('invalid_subcommand', () => parseVaultArguments(['status']));
   fails('unknown_option', () => parseVaultArguments(['git-help', '--remote']));
   fails('duplicate_option', () => parseVaultArguments(['git-help', '--full', '--full']));
   fails('unexpected_option_value', () => parseVaultArguments(['git-help', '--full=true']));
   fails('unsupported_option', () => parseVaultArguments(['git-help', '--dry-run']));
   fails('unsupported_option', () => parseVaultArguments(['git-help', '--path', '/vault']));
+  fails('unsupported_option', () => parseVaultArguments(['status', '--full']));
   fails('unknown_option', () => parseVaultArguments(['init', '--no-skill']));
   fails('unsupported_option', () => parseVaultArguments(['open', '--full']));
   fails('missing_option', () => parseVaultArguments(['tag-fix', '--from', 'wordpres']));

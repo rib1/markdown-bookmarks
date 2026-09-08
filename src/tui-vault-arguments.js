@@ -14,7 +14,7 @@ export function parseVaultArguments(args) {
   const parsed = parseTuiArguments(args, { options: vaultOptions, maximumPositionals: 1 });
   if (parsed.help) return parsed;
   const [action] = parsed.positionals;
-  if (!['init', 'skill-install', 'git-help', 'open', 'tag-lint', 'tag-fix'].includes(action)) {
+  if (!['init', 'skill-install', 'status', 'git-help', 'open', 'tag-lint', 'tag-fix'].includes(action)) {
     throw argumentError('invalid_subcommand', 'Usage: npm run bookmark -- vault COMMAND [options]. Run vault --help.');
   }
   if (!['git-help', 'tag-lint'].includes(action) && parsed.full) {

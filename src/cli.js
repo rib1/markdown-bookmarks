@@ -21,8 +21,19 @@ import {
 } from './vault-directory-launcher.js';
 import { isVaultInitialized } from './vault-state.js';
 import { fixVaultTags, lintVaultTags } from './tag-maintenance.js';
+import { inspectVaultStatus, renderVaultStatus } from './vault-status.js';
 
 const [command, ...args] = process.argv.slice(2);
+
+function tuiCommandPrefix() {
+  return process.env.BOOKMARK_RESULTS_HOST_VAULT
+    ? 'docker compose exec bookmarkd node src/cli.js'
+    : 'npm run bookmark --';
+}
+
+function tuiCommand(arguments_) {
+  return `${tuiCommandPrefix()} ${arguments_}`;
+}
 
 function printSearchResult(result, index, expand = false) {
   const title = metadataValue(result.content, 'title') || '(untitled)';
@@ -96,16 +107,18 @@ Options:
 function printVaultHelp(root, initialized = true) {
   const initialization = initialized
     ? ''
-    : `No initialized bookmark vault was found at ${root}.\nFirst run: npm run bookmark -- vault init\n\n`;
-  console.log(`${initialization}Usage: npm run bookmark -- vault init [--path PATH]
-   or: npm run bookmark -- vault skill-install [--path PATH]
-   or: npm run bookmark -- vault git-help [--full]
-   or: npm run bookmark -- vault open [--dry-run]
-   or: npm run bookmark -- vault tag-lint [--full] [--check]
-   or: npm run bookmark -- vault tag-fix --from TAG --to TAG [--apply]
+    : `No initialized bookmark vault was found at ${root}.\nFirst run: ${tuiCommand('vault init')}\n\n`;
+  console.log(`${initialization}Usage: ${tuiCommand('vault init [--path PATH]')}
+   or: ${tuiCommand('vault skill-install [--path PATH]')}
+   or: ${tuiCommand('vault status')}
+   or: ${tuiCommand('vault git-help [--full]')}
+   or: ${tuiCommand('vault open [--dry-run]')}
+   or: ${tuiCommand('vault tag-lint [--full] [--check]')}
+   or: ${tuiCommand('vault tag-fix --from TAG --to TAG [--apply]')}
 
-No Git command is run and no network connection is made by git-help. Vault open
-uses the native file explorer; Docker prints a host command instead.
+No Git command is run and no network connection is made by status or git-help.
+Status can compare local HEAD with the last fetched upstream checkpoint. Vault
+open uses the native file explorer; Docker prints a host command instead.
 
 Options:
   --path PATH       Select a path for init or skill-install.
@@ -301,6 +314,7 @@ function printHelp() {
   console.log(`Markdown Bookmarks commands:
   vault init [--path PATH]
   vault skill-install [--path PATH]
+  vault status
   vault git-help [--full]
   vault open [--dry-run]
   vault tag-lint [--full] [--check]
@@ -332,6 +346,7 @@ QUERY may be omitted when --saved-within or --saved-since is provided.
 Common workflows:
   npm run bookmark -- vault init
   npm run bookmark -- vault skill-install
+  npm run bookmark -- vault status
   npm run bookmark -- vault git-help
   npm run bookmark -- vault open
   npm run bookmark -- vault tag-lint
@@ -410,7 +425,13 @@ async function runTui() {
       console.log(`Vault ready: ${root}`);
       console.log('Next: git -C "' + root + '" init');
     } else if (options.action === 'git-help') {
-      console.log(renderVaultGitHelp(root, { full: options.full, initialized }));
+      const hostRoot = process.env.BOOKMARK_RESULTS_HOST_VAULT;
+      console.log(renderVaultGitHelp(root, {
+        full: options.full,
+        initialized,
+        commandPrefix: tuiCommandPrefix(),
+        hostRoot
+      }));
     } else {
       if (!initialized) {
         throw new Error(`Vault is not initialized at: ${root}\nFirst run: npm run bookmark -- vault init`);
@@ -418,6 +439,11 @@ async function runTui() {
       if (options.action === 'skill-install') {
         const target = await installVaultSkill(root);
         console.log(`LLM skill installed in vault: ${target}`);
+      } else if (options.action === 'status') {
+        const hostRoot = process.env.BOOKMARK_RESULTS_HOST_VAULT;
+        console.log(renderVaultStatus(await inspectVaultStatus(root, { hostRoot }), {
+          gitHelpCommand: tuiCommand('vault git-help')
+        }));
       } else if (options.action === 'open') await openVaultDirectory(root, options.dryRun);
       else if (options.action === 'tag-lint') {
         const report = await lintVaultTags(root);

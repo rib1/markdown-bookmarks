@@ -453,6 +453,27 @@ The canonical tag must already exist. Preview changes no files. When both tags
 occur in one bookmark, applying the fix removes the misspelled tag instead of
 creating a duplicate. The command never commits or pushes vault changes.
 
+## Check vault status
+
+Show bookmark, project, event, and unique-tag counts; schema and instruction
+state; record warnings; and the oldest, newest, and most recently saved
+bookmark. Record warnings include missing IDs, URLs, or saved dates and duplicate
+stable IDs or canonical URLs:
+
+```powershell
+npm run bookmark -- vault status
+```
+
+With the Docker companion running, use
+`docker compose exec bookmarkd node src/cli.js vault status` instead.
+Docker output labels both the host vault path and its `/vault` container mount;
+native output shows only the native vault path.
+
+The command does not run Git or access the network. When local Git metadata is
+available, it compares `HEAD` with the last fetched upstream tracking ref. This
+is an offline checkpoint only: use `git fetch` and `git status` to learn the
+current remote and working-tree state.
+
 ## Version the private vault
 
 Print a concise, copyable Git workflow for the configured vault:
@@ -467,8 +488,22 @@ Add initialization, remote-check, conflict, and commit-message examples with:
 npm run bookmark -- vault git-help --full
 ```
 
-The help command does not run Git or access the network. Review vault changes,
-pull before saving on another machine, and commit and push explicitly.
+With Docker, use:
+
+```powershell
+docker compose exec bookmarkd node src/cli.js vault git-help
+docker compose exec bookmarkd node src/cli.js vault git-help --full
+```
+
+Docker help labels both paths, but its copyable Git commands use the host vault
+path rather than the container-only `/vault` mount.
+
+The help command does not run Git or access the network. Its full form explains
+how to recover when companion-managed `AGENTS.md` blocks a pull: review it,
+preserve personal instructions in `AGENTS.local.md`, restore only generated
+changes when appropriate, and commit or stash all remaining changes before
+pulling. Pull before saving on another machine, then review, commit, synchronize,
+and push explicitly.
 If the selected vault is not initialized, help tells you to run `vault init`
 first.
 
