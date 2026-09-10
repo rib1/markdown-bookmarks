@@ -1,7 +1,36 @@
+const TRACKING_QUERY_PREFIXES = ['utm_'];
+const TRACKING_QUERY_PARAMS = new Set([
+  'fbclid',
+  'gclid',
+  'msclkid',
+  'dclid',
+  'zanpid',
+  'ref',
+  'source',
+  'feature'
+]);
+
+function isTrackingParam(key) {
+  const lower = key.toLowerCase();
+  if (TRACKING_QUERY_PARAMS.has(lower)) return true;
+  return TRACKING_QUERY_PREFIXES.some((prefix) => lower.startsWith(prefix));
+}
+
 export function normalizeUrl(value) {
   const url = new URL(value);
   url.hash = '';
   if (url.pathname !== '/') url.pathname = url.pathname.replace(/\/$/, '');
+  const searchParams = new URLSearchParams(url.search);
+  let changed = false;
+  for (const key of [...searchParams.keys()]) {
+    if (isTrackingParam(key)) {
+      searchParams.delete(key);
+      changed = true;
+    }
+  }
+  if (changed) {
+    url.search = searchParams.toString() ? `?${searchParams.toString()}` : '';
+  }
   return url.toString();
 }
 

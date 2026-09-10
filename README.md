@@ -19,8 +19,11 @@ export BOOKMARK_VAULT="$HOME/path/to/private-vault"
 Then start with Docker:
 
 ```powershell
-docker compose up --build
+docker compose up -d --build bookmarkd
 ```
+
+Stop the companion with `docker compose down`. Use `docker compose up --build bookmarkd`
+when you want foreground logs.
 
 Or run the current prototype directly with Node.js 26 and npm:
 

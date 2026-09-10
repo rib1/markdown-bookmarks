@@ -277,6 +277,19 @@ Vault configuration must be consistent between server and CLI:
 BOOKMARK_VAULT -> VAULT_PATH -> ./vault
 ```
 
+## Run the companion during development
+
+Start the local API in the background with:
+
+```powershell
+docker compose up -d --build bookmarkd
+```
+
+Stop it with `docker compose down`. Use `docker compose up --build bookmarkd`
+when foreground logs are useful. After pulling application changes or changing
+Compose configuration, use `docker compose up -d --build --force-recreate
+bookmarkd` before reloading the unpacked browser extension.
+
 ## LLM skill rules
 
 The generic skill is optional and is never installed by `vault init`. An

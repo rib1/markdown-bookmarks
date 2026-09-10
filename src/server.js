@@ -66,7 +66,7 @@ server.listen(port, '0.0.0.0', () => {
     `bookmark companion started at: ${startedAt}`,
     ...migrationLog,
     ...(migration.migrationsRun.length ? [
-      `vault migration changes: normalized tags: ${migration.normalizedTags}; OS device labels added: ${migration.osLabelsAdded}`
+      `vault migration changes: normalized tags: ${migration.normalizedTags}; OS device labels added: ${migration.osLabelsAdded}; canonical URLs updated: ${migration.updatedCanonicalUrls}`
     ] : []),
     `vault AGENTS.md: ${migration.agentInstructions}`,
     `stale search-result pages purged: ${purgedSearchPages}`,

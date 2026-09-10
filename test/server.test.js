@@ -87,13 +87,13 @@ access_count: 1
   assert.match(message, new RegExp(`vault: ${bookmarkVault.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(message, /vault migration ran: 001-bookmark-schema-v1\.js; schema: 0 -> 1/);
   assert.match(message, /vault migration ran: 002-normalize-tags-and-capture-labels\.js; schema: 1 -> 2/);
-  assert.match(message, /vault migration changes: normalized tags: 0; OS device labels added: 0/);
+  assert.match(message, /vault migration changes: normalized tags: 0; OS device labels added: 0; canonical URLs updated: 0/);
   assert.match(message, /vault AGENTS\.md: installed/);
   assert.match(message, /stale search-result pages purged: 1/);
-  assert.match(message, /schema: 2; migrated: 1/);
+  assert.match(message, /schema: 3; migrated: 1/);
   await assert.rejects(() => fs.access(staleResult), { code: 'ENOENT' });
   const migratedLegacy = await fs.readFile(legacyFile, 'utf8');
-  assert.match(migratedLegacy, /schema_version: 2/);
+  assert.match(migratedLegacy, /schema_version: 3/);
   assert.match(migratedLegacy, /save_count: 1/);
   assert.doesNotMatch(migratedLegacy, /first_opened_at:|last_opened_at:|access_count:/);
 
@@ -101,7 +101,7 @@ access_count: 1
   const capabilities = await capabilitiesResponse.json();
   assert.equal(capabilitiesResponse.status, 200);
   assert.equal(capabilities.api_protocol, API_PROTOCOL_VERSION);
-  assert.equal(capabilities.bookmark_schema_version, 2);
+  assert.equal(capabilities.bookmark_schema_version, 3);
   assert.equal(capabilities.features.share_history, 1);
   assert.equal(capabilities.features.capture_history, 1);
 

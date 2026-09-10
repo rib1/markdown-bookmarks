@@ -98,7 +98,8 @@ Legacy data.
   assert.equal(first.schemaVersion, BOOKMARK_SCHEMA_VERSION);
   assert.deepEqual(first.migrationsRun, [
     { script: '001-bookmark-schema-v1.js', fromVersion: 0, toVersion: 1 },
-    { script: '002-normalize-tags-and-capture-labels.js', fromVersion: 1, toVersion: 2 }
+    { script: '002-normalize-tags-and-capture-labels.js', fromVersion: 1, toVersion: 2 },
+    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 }
   ]);
   assert.equal(first.scanned, 1);
   assert.equal(first.migrated, 1);
@@ -161,7 +162,8 @@ save_history:
   const first = await migrateVault(root);
   const migrated = await fs.readFile(file, 'utf8');
   assert.deepEqual(first.migrationsRun, [
-    { script: '002-normalize-tags-and-capture-labels.js', fromVersion: 1, toVersion: 2 }
+    { script: '002-normalize-tags-and-capture-labels.js', fromVersion: 1, toVersion: 2 },
+    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 }
   ]);
   assert.equal(first.normalizedTags, 3);
   assert.equal(first.osLabelsAdded, 1);
@@ -170,13 +172,89 @@ save_history:
     { id: 'mac-capture', os: 'mac', browser: 'Google Chrome', device: 'mac' },
     { id: 'custom-capture', device: 'home-mac', os: 'mac', custom: 'preserved' }
   ]);
-  assert.match(migrated, /schema_version: 2/);
+  assert.match(migrated, /schema_version: 3/);
 
   const second = await migrateVault(root);
   assert.equal(second.skipped, true);
   assert.equal(second.normalizedTags, 0);
   assert.equal(second.osLabelsAdded, 0);
+  assert.equal(second.updatedCanonicalUrls, 0);
   assert.equal(await fs.readFile(file, 'utf8'), migrated);
+});
+
+test('canonicalizes URLs on save and migrates existing schema v2 URLs to canonical format', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-canonical-urls-'));
+  const directory = path.join(root, 'bookmarks', '2026', '09');
+  await fs.mkdir(directory, { recursive: true });
+  await fs.writeFile(path.join(root, '.markdown-bookmarks.json'), '{"schema_version":2}\n', 'utf8');
+
+  const ytFile = path.join(directory, 'yt-legacy.md');
+  await fs.writeFile(ytFile, `---
+schema_version: 2
+id: yt-legacy
+url: "https://youtu.be/dQw4w9WgXcQ?feature=share"
+canonical_url: "https://youtu.be/dQw4w9WgXcQ?feature=share"
+title: "Rick Astley"
+type: video
+contexts:
+  []
+tags:
+  - "music"
+saved_at: 2026-09-05T10:00:00.000Z
+first_saved_at: 2026-09-05T10:00:00.000Z
+last_saved_at: 2026-09-05T10:00:00.000Z
+save_count: 1
+save_history:
+  - "2026-09-05T10:00:00.000Z"
+---
+`, 'utf8');
+
+  const genericFile = path.join(directory, 'generic-legacy.md');
+  await fs.writeFile(genericFile, `---
+schema_version: 2
+id: generic-legacy
+url: "https://example.com/article?utm_source=twitter&utm_medium=social&utm_campaign=launch&ref=homepage#intro"
+canonical_url: "https://example.com/article?utm_source=twitter&utm_medium=social&utm_campaign=launch&ref=homepage"
+title: "Launch Article"
+type: bookmark
+contexts:
+  []
+tags:
+  - "news"
+saved_at: 2026-09-05T10:00:00.000Z
+first_saved_at: 2026-09-05T10:00:00.000Z
+last_saved_at: 2026-09-05T10:00:00.000Z
+save_count: 1
+save_history:
+  - "2026-09-05T10:00:00.000Z"
+---
+`, 'utf8');
+
+  const migrationResult = await migrateVault(root);
+  assert.deepEqual(migrationResult.migrationsRun, [
+    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 }
+  ]);
+  assert.equal(migrationResult.updatedCanonicalUrls, 2);
+
+  const migratedYt = await fs.readFile(ytFile, 'utf8');
+  assert.match(migratedYt, /schema_version: 3/);
+  assert.match(migratedYt, /canonical_url: "https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ"/);
+
+  const migratedGeneric = await fs.readFile(genericFile, 'utf8');
+  assert.match(migratedGeneric, /schema_version: 3/);
+  assert.match(migratedGeneric, /canonical_url: "https:\/\/example\.com\/article"/);
+
+  const duplicateSave = await saveBookmark({
+    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&utm_source=newsletter',
+    title: 'Rick Astley Official',
+    tags: ['classic']
+  }, root);
+
+  assert.equal(duplicateSave.duplicate, true);
+  assert.equal(duplicateSave.id, 'yt-legacy');
+  const updatedYt = await fs.readFile(ytFile, 'utf8');
+  assert.deepEqual(metadataList(updatedYt, 'tags'), ['music', 'classic', 'youtube']);
+  assert.match(updatedYt, /save_count: 2/);
 });
 
 test('installs and refreshes vault AGENTS.md when migrations are checked', async () => {
@@ -322,7 +400,7 @@ test('stores optional sender history without changing the schema or empty bookma
   }, root);
   const content = await fs.readFile(first.file, 'utf8');
   const shares = metadataList(content, 'share_history');
-  assert.equal(BOOKMARK_SCHEMA_VERSION, 2);
+  assert.equal(BOOKMARK_SCHEMA_VERSION, 3);
   assert.equal(shares.length, 2);
   assert.deepEqual(shares[0], {
     id: 'share-one', sender: 'Alice', channel: 'Signal',

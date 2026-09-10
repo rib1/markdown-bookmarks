@@ -81,8 +81,8 @@ function slug(value) {
 async function findBookmarkByUrl(url, root) {
   const normalized = normalizeUrl(url);
   for (const result of await findBookmarks('', root)) {
-    const match = result.content.match(/^(?:canonical_url|url):\s*["']?([^"'\r\n]+)["']?\s*$/m);
-    if (match && normalizeUrl(match[1]) === normalized) return result;
+    const candidate = readScalar(result.content, 'canonical_url') || readScalar(result.content, 'url');
+    if (candidate && normalizeUrl(candidate) === normalized) return result;
   }
   return undefined;
 }
@@ -95,7 +95,7 @@ export async function saveBookmark(input, root = vaultRoot()) {
   const id = input.id || crypto.randomUUID();
   const title = input.title || input.url;
   const tags = normalizeTags(input.tags);
-  const canonicalUrl = normalizeUrl(input.url);
+  const canonicalUrl = input.canonical_url ? normalizeUrl(input.canonical_url) : normalizeUrl(input.url);
   const existing = await findBookmarkByUrl(canonicalUrl, root);
   if (existing) {
     let content = migrateBookmarkContent(existing.content).content;
@@ -117,6 +117,7 @@ export async function saveBookmark(input, root = vaultRoot()) {
     for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'imgur_id', 'space_key', 'page_id', 'issue_key', 'project_key', 'published_at', 'published_at_source', 'published_at_confidence']) {
       if (input[field]) content = replaceScalar(content, field, input[field]);
     }
+    content = replaceScalar(content, 'canonical_url', canonicalUrl);
     content = replaceScalar(content, 'last_saved_at', now);
     const previousSaveCount = Number(readScalar(content, 'save_count') || 0);
     let saveHistory = readList(content, 'save_history');

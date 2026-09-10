@@ -81,19 +81,20 @@ Windows PowerShell:
 
 ```powershell
 $env:BOOKMARK_VAULT = 'C:\Users\YOUR-NAME\Documents\my-bookmarks'
-docker compose up --build
+docker compose up -d --build bookmarkd
 ```
 
 macOS/Linux:
 
 ```bash
 export BOOKMARK_VAULT="$HOME/Documents/my-bookmarks"
-docker compose up --build
+docker compose up -d --build bookmarkd
 ```
 
-The local API listens at `http://127.0.0.1:8787`. Keep the terminal open, or
-start it in the background with `docker compose up --build -d`. Stop it with
-`docker compose down`.
+The local API listens at `http://127.0.0.1:8787`. The detached command keeps
+the companion running in the background. Stop it with `docker compose down`.
+For foreground logs while troubleshooting, run `docker compose up --build bookmarkd`
+instead.
 
 The same configured vault is used by the companion service and its CLI.
 On startup, the companion compares `.markdown-bookmarks.json` with the current
@@ -155,6 +156,10 @@ instruction to update the older component.
    ```powershell
    docker compose up -d --build --force-recreate bookmarkd
    ```
+
+   Use `--force-recreate` here after pulling application changes or changing
+   the Compose configuration. For ordinary startup, `docker compose up -d
+   --build bookmarkd` is sufficient.
 
 2. Open `chrome://extensions`.
 3. Enable **Developer mode**.

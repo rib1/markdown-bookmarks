@@ -419,7 +419,7 @@ test('TUI commands initialize, save, find, install the vault skill, and dry-run 
   const vaultStatus = await run(process.execPath, [cli, 'vault', 'status'], { env });
   assert.match(vaultStatus.stdout, /Bookmark vault status/);
   assert.match(vaultStatus.stdout, /Bookmarks: 1/);
-  assert.match(vaultStatus.stdout, /Schema: 2 \(current\)/);
+  assert.match(vaultStatus.stdout, /Schema: 3 \(current\)/);
   assert.match(vaultStatus.stdout, /Record checks: passed \(IDs, URLs, saved dates, duplicate IDs\/URLs\)/);
   assert.match(vaultStatus.stdout, /Git: not initialized/);
   assert.match(vaultStatus.stdout, /See vault Git help: npm run bookmark -- vault git-help/);

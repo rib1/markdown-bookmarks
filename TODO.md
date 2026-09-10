@@ -32,7 +32,7 @@ prototype sessions.
 - [x] Improve generic author extraction and publication-date detection.
 - [ ] Store extraction provenance and confidence consistently for all generated
       metadata.
-- [ ] Add canonical URL handling for more sites.
+- [x] Add canonical URL handling for more sites.
 - [ ] Add deterministic content extraction for cleaned Markdown.
 - [ ] Add optional page description and key-point extraction without requiring
       an LLM.

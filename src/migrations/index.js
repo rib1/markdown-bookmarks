@@ -5,11 +5,12 @@ import { readScalar, replaceScalar } from '../bookmark-format.js';
 import { syncVaultAgentInstructions } from '../vault-agent-instructions.js';
 import * as schemaVersion1 from './001-bookmark-schema-v1.js';
 import * as schemaVersion2 from './002-normalize-tags-and-capture-labels.js';
+import * as schemaVersion3 from './003-canonical-urls.js';
 
-export const BOOKMARK_SCHEMA_VERSION = 2;
+export const BOOKMARK_SCHEMA_VERSION = 3;
 export const VAULT_SCHEMA_FILE = '.markdown-bookmarks.json';
 
-const BOOKMARK_MIGRATIONS = [schemaVersion1, schemaVersion2];
+const BOOKMARK_MIGRATIONS = [schemaVersion1, schemaVersion2, schemaVersion3];
 const VAULT_GITIGNORE_RULES = ['.DS_Store', '/views/.search-results/'];
 
 async function writeAtomic(file, content) {
@@ -90,6 +91,7 @@ export function migrateBookmarkContent(original) {
   let ambiguousContextTags = 0;
   let normalizedTags = 0;
   let osLabelsAdded = 0;
+  let updatedCanonicalUrls = 0;
   for (const migration of BOOKMARK_MIGRATIONS) {
     if (version >= migration.version) continue;
     const result = migration.migrate(content);
@@ -98,11 +100,12 @@ export function migrateBookmarkContent(original) {
     ambiguousContextTags += result.ambiguousContextTags ?? 0;
     normalizedTags += result.normalizedTags ?? 0;
     osLabelsAdded += result.osLabelsAdded ?? 0;
+    updatedCanonicalUrls += result.updatedCanonicalUrls ?? 0;
     version = migration.version;
   }
   return {
     content, fromVersion: parsedVersion, toVersion: version,
-    repairedTags, ambiguousContextTags, normalizedTags, osLabelsAdded
+    repairedTags, ambiguousContextTags, normalizedTags, osLabelsAdded, updatedCanonicalUrls
   };
 }
 
@@ -129,6 +132,7 @@ export async function migrateVault(root) {
     ambiguousContextTags: 0,
     normalizedTags: 0,
     osLabelsAdded: 0,
+    updatedCanonicalUrls: 0,
     agentInstructions: undefined,
     gitignoreUpdated,
     skipped: fromSchemaVersion === BOOKMARK_SCHEMA_VERSION
@@ -149,6 +153,7 @@ export async function migrateVault(root) {
     result.ambiguousContextTags += migration.ambiguousContextTags;
     result.normalizedTags += migration.normalizedTags;
     result.osLabelsAdded += migration.osLabelsAdded;
+    result.updatedCanonicalUrls += migration.updatedCanonicalUrls;
     if (migration.fromVersion === migration.toVersion) continue;
     await writeAtomic(file, migration.content);
     result.migrated++;
