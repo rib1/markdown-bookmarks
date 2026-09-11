@@ -181,7 +181,7 @@ test('TUI help wins consistently and argument errors are concise', async () => {
   }
 
   const hyphenQuery = await run(process.execPath, [cli, 'find', '--', '-alpha'], { env });
-  assert.equal(hyphenQuery.stdout.trim(), 'No bookmarks found for: -alpha');
+  assert.equal(hyphenQuery.stdout.trim(), 'SEARCH_MODE: substring-exact\nNo bookmarks found for: -alpha');
 });
 
 test('vault tag maintenance reports, checks, previews, and applies reviewed fixes', async () => {
@@ -360,7 +360,7 @@ test('time-filtered find numbering is reused by open --pick and --with', async (
 
   const noRecent = await run(process.execPath,
     [cli, 'find', '--saved-since', '2099-01-01'], { env });
-  assert.equal(noRecent.stdout.trim(), 'No bookmarks found for: saved since 2099-01-01');
+  assert.equal(noRecent.stdout.trim(), 'SEARCH_MODE: filter-only\nNo bookmarks found for: saved since 2099-01-01');
 
   await assert.rejects(
     () => run(process.execPath, [cli, 'find'], { env }),
