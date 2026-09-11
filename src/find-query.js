@@ -4,6 +4,8 @@ export const FIND_USAGE = 'Usage: npm run bookmark -- find QUERY [options]\n'
 
 export const SAVED_WITHIN_DAYS = Object.freeze({ day: 1, week: 7, month: 30, year: 365 });
 
+export { searchMode } from './search-mode.js';
+
 export class FindQueryError extends Error {
   constructor(code, message) {
     super(message);

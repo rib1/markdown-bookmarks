@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FIND_USAGE, FindQueryError, prepareFindRequest, searchCutoff } from '../src/find-query.js';
+import { FIND_USAGE, FindQueryError, prepareFindRequest, searchCutoff, searchMode } from '../src/find-query.js';
+
+test('selects predictable modes for short words and special terms', () => {
+  assert.equal(searchMode(), 'filter-only');
+  assert.equal(searchMode('ai'), 'short-word-exact');
+  assert.equal(searchMode('hs fi'), 'short-word-exact');
+  assert.equal(searchMode('hs.fi'), 'substring-exact');
+  assert.equal(searchMode('OPS-7'), 'substring-exact');
+  assert.equal(searchMode('database'), 'substring-exact');
+  assert.equal(searchMode('databse', { fuzzy: true }), 'fuzzy');
+});
 
 test('allows an omitted term only with a valid time filter', () => {
   assert.deepEqual(prepareFindRequest({ savedWithin: 'day' }), {

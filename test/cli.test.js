@@ -441,11 +441,14 @@ test('TUI commands initialize, save, find, install the vault skill, and dry-run 
   assert.doesNotMatch(dockerVaultStatus.stdout, /See vault Git help: npm run/);
 
   const found = await run(process.execPath, [cli, 'find', 'amiga'], { env });
+  assert.match(found.stdout, /^SEARCH_MODE: substring-exact$/m);
   assert.match(found.stdout, new RegExp(`^1\\. CLI Amiga \\[${savedId.slice(0, 8)}\\]$`, 'm'));
   assert.match(found.stdout, /URL: https:\/\/example.test\/cli/);
   assert.match(found.stdout, /^ {3}TAGS: amiga, test$/m);
   assert.doesNotMatch(found.stdout, /FILE:/);
   assert.doesNotMatch(found.stdout, /^title:|^tags:|^## Summary$/m);
+  const shortFound = await run(process.execPath, [cli, 'find', 'am'], { env });
+  assert.match(shortFound.stdout, /^SEARCH_MODE: short-word-exact$/m);
   const expanded = await run(process.execPath, [cli, 'find', 'amiga', '--expand'], { env });
   assert.match(expanded.stdout, /^RESULT: 1 — CLI Amiga$/m);
   assert.match(expanded.stdout, /- "amiga"/);

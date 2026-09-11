@@ -1,4 +1,5 @@
 import { prepareFindRequest } from './find-query.js';
+import { searchMode } from './search-mode.js';
 import { argumentError, parseTuiArguments } from './tui-arguments.js';
 
 const options = {
@@ -29,5 +30,5 @@ export function parseFindArguments(args) {
   const request = prepareFindRequest({
     query: parsed.positionals[0], savedWithin: parsed.savedWithin, savedSince: parsed.savedSince
   });
-  return { ...parsed, ...request };
+  return { ...parsed, ...request, mode: searchMode(request.query, { fuzzy: parsed.fuzzy }) };
 }

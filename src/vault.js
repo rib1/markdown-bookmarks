@@ -23,6 +23,7 @@ import { appendShareEvent, createShareEvent } from './share-history.js';
 import { appendCaptureEvent, createCaptureEvent } from './capture-history.js';
 import { vaultRoot } from './vault-path.js';
 import { searchCutoff } from './find-query.js';
+import { matchesShortWords, searchMode } from './search-mode.js';
 import { listBookmarkFiles } from './vault-bookmark-files.js';
 
 export { vaultRoot } from './vault-path.js';
@@ -176,10 +177,15 @@ function savedAfter(content, cutoff) {
 export async function findBookmarks(query, root = vaultRoot(), { savedWithin, savedSince, fuzzy = false } = {}) {
   const results = [];
   const cutoff = searchCutoff({ savedWithin, savedSince });
+  const mode = searchMode(query, { fuzzy });
+  const shortWordMode = searchMode(query) === 'short-word-exact';
   for (const target of await listBookmarkFiles(root)) {
     const content = await fs.readFile(target, 'utf8');
     if (cutoff !== undefined && !savedAfter(content, cutoff)) continue;
-    if (content.toLowerCase().includes(query.toLowerCase())) {
+    const exactMatch = (mode === 'short-word-exact' || (mode === 'fuzzy' && shortWordMode))
+      ? matchesShortWords(content, query)
+      : content.toLowerCase().includes(query.toLowerCase());
+    if (exactMatch) {
       results.push(fuzzy
         ? { file: target, content, matchType: 'exact', matchScore: 1, matchedFields: ['content'] }
         : { file: target, content });

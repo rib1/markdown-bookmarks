@@ -514,6 +514,17 @@ test('fuzzy search finds typos, ranks exact matches first, and keeps time filter
   assert.match(ranked[1].content, /title: "Amgia notes"/);
 });
 
+test('short alphabetic searches use exact word boundaries', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-short-search-'));
+  await saveBookmark({ url: 'https://example.test/ai', title: 'AI tools' }, root);
+  await saveBookmark({ url: 'https://example.test/email', title: 'Email guide' }, root);
+  await saveBookmark({ url: 'https://example.test/jira', title: 'OPS-7 issue' }, root);
+  assert.equal((await findBookmarks('ai', root)).length, 1);
+  assert.equal((await findBookmarks('hs.fi', root)).length, 0);
+  assert.equal((await findBookmarks('OPS-7', root)).length, 1);
+  assert.equal((await findBookmarks('ai', root, { fuzzy: true })).length, 1);
+});
+
 test('stores non-LLM page metadata and context', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-metadata-'));
   const saved = await saveBookmark({

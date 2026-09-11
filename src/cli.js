@@ -227,8 +227,10 @@ Options:
 Rules:
   QUERY may be omitted only with one time filter. Use either --saved-within or
   --saved-since, not both. Quote a multiword query. Use the end-of-options
-  marker before a query beginning with a hyphen. --expand and --browser cannot
-  be combined.
+  marker before a query beginning with a hyphen. One-to-three-letter terms use
+  exact word boundaries; terms containing numbers or punctuation use substring
+  matching. --fuzzy is explicit and keeps short terms strict. The selected mode
+  is printed as SEARCH_MODE. --expand and --browser cannot be combined.
 
 Examples:
   npm run bookmark -- find amiga
@@ -476,6 +478,9 @@ async function runTui() {
   if (command === 'find') {
     const request = parseFindArguments(args);
     if (request.help) return printFindHelp();
+    const modeLine = `SEARCH_MODE: ${request.mode}`;
+    if (request.browser) console.error(modeLine);
+    else console.log(modeLine);
     const results = await findBookmarks(request.query, undefined, {
       savedWithin: request.savedWithin,
       savedSince: request.savedSince,

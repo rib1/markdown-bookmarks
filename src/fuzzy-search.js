@@ -98,7 +98,7 @@ function searchableFields(content) {
 }
 
 function requiredSimilarity(token) {
-  if (token.length <= 2) return 1;
+  if (token.length <= 3) return 1;
   if (token.length <= 4) return 0.75;
   return 0.7;
 }

@@ -256,6 +256,10 @@ the dependency-free matcher in `src/fuzzy-search.js`: Unicode normalization,
 token comparison, adjacent-transposition-aware edit distance, strict thresholds
 for short terms, weighted metadata/body fields, and deterministic score ordering.
 Every query token must qualify. Exact hits rank before fuzzy hits, and the same
+search mode is reported as `SEARCH_MODE` before normal terminal results. Terms
+of one to three letters use exact word boundaries; terms containing punctuation
+or numbers use normal substring matching. `--fuzzy` is explicit and keeps short
+terms strict.
 ranking must feed text output, generated browser pages, and `open --pick`.
 
 `open` validates HTTP/HTTPS URLs before launching the platform default browser.
