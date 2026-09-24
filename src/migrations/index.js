@@ -6,11 +6,12 @@ import { syncVaultAgentInstructions } from '../vault-agent-instructions.js';
 import * as schemaVersion1 from './001-bookmark-schema-v1.js';
 import * as schemaVersion2 from './002-normalize-tags-and-capture-labels.js';
 import * as schemaVersion3 from './003-canonical-urls.js';
+import * as schemaVersion4 from './004-project-notes-v2.js';
 
-export const BOOKMARK_SCHEMA_VERSION = 3;
+export const BOOKMARK_SCHEMA_VERSION = 4;
 export const VAULT_SCHEMA_FILE = '.markdown-bookmarks.json';
 
-const BOOKMARK_MIGRATIONS = [schemaVersion1, schemaVersion2, schemaVersion3];
+const BOOKMARK_MIGRATIONS = [schemaVersion1, schemaVersion2, schemaVersion3, schemaVersion4];
 const VAULT_GITIGNORE_RULES = ['.DS_Store', '/views/.search-results/'];
 
 async function writeAtomic(file, content) {
@@ -77,6 +78,17 @@ async function bookmarkFiles(root) {
   return files;
 }
 
+async function projectFiles(root) {
+  try {
+    const entries = await fs.readdir(path.join(root, 'projects'), { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
+      .map((entry) => path.join(root, 'projects', entry.name));
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
 export function migrateBookmarkContent(original) {
   const declaredVersion = readScalar(original, 'schema_version');
   const parsedVersion = declaredVersion === undefined ? 0 : Number(declaredVersion);
@@ -133,6 +145,7 @@ export async function migrateVault(root) {
     normalizedTags: 0,
     osLabelsAdded: 0,
     updatedCanonicalUrls: 0,
+    projectNotesMigrated: 0,
     agentInstructions: undefined,
     gitignoreUpdated,
     skipped: fromSchemaVersion === BOOKMARK_SCHEMA_VERSION
@@ -157,6 +170,18 @@ export async function migrateVault(root) {
     if (migration.fromVersion === migration.toVersion) continue;
     await writeAtomic(file, migration.content);
     result.migrated++;
+  }
+  if (fromSchemaVersion < schemaVersion4.version) {
+    for (const file of await projectFiles(root)) {
+      let migration;
+      try { migration = schemaVersion4.migrateProject(await fs.readFile(file, 'utf8')); } catch (error) {
+        throw new Error(`Failed to migrate project ${file}: ${error.message}`, { cause: error });
+      }
+      if (!migration.migrated) continue;
+      await writeAtomic(file, migration.content);
+      result.projectNotesMigrated += migration.migrated;
+      result.migrated++;
+    }
   }
   result.agentInstructions = (await syncVaultAgentInstructions(root)).status;
   await writeVaultSchemaVersion(root, BOOKMARK_SCHEMA_VERSION);

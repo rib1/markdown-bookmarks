@@ -29,12 +29,17 @@ try {
   const extensionId = new URL(serviceWorker.url()).host;
   const popup = await browser.newPage();
   console.log('opening extension popup');
+  const projectId = `e2e-talk-${Date.now()}`;
+  await exec('node', ['src/cli.js', 'project', 'create', '--id', projectId, '--title', projectId], {
+    cwd: '/e2e', env: { ...process.env, BOOKMARK_VAULT: vault }
+  });
   const testUrl = `https://example.test/e2e-bookmark?run=${Date.now()}`;
   // The test URL avoids relying on browser chrome UI to open the action popup.
   await popup.goto(`chrome-extension://${extensionId}/popup.html?test-url=${encodeURIComponent(testUrl)}&test-title=${encodeURIComponent('E2E Bookmark Page')}`);
   // Exercise the same tag-entry and save path used by the user.
   await popup.locator('#context').selectOption('travel');
   await popup.locator('#tags').fill('e2e,work');
+  await popup.locator('#project').selectOption(projectId);
   await popup.locator('#shared-by').fill('Alice');
   await popup.locator('#shared-via').fill('Signal');
   await popup.locator('summary').click();
@@ -79,6 +84,8 @@ try {
   assert.match(content, /"os":"linux"/);
   assert.match(content, /"architecture":"x86-64"/);
   assert.match(content, /"browser":"Chromium"/);
+  const projectContent = await fs.readFile(path.join(vault, 'projects', `${projectId}-${projectId}.md`), 'utf8');
+  assert.match(projectContent, /"id":"[0-9a-f-]{36}"/);
   const saveHistory = content.match(/^save_history:\n((?: {2}- .*\n)+)/m)?.[1];
   assert.equal((saveHistory?.match(/^ {2}- /gm) || []).length, 2);
   // Verify that the CLI can resolve the saved bookmark for browser opening.

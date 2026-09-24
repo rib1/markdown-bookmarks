@@ -1,4 +1,5 @@
 import { assessCapabilities, browserIdentity, extensionClient } from './compatibility.js';
+import { cachedProjects } from './project-cache.js';
 
 const companionUrl = 'http://127.0.0.1:8787';
 const client = extensionClient(chrome.runtime.getManifest().version);
@@ -14,12 +15,25 @@ async function responseJson(response) {
 }
 
 async function getCapabilities() {
-  const response = await fetch(`${companionUrl}/capabilities`);
+  const response = await fetch(`${companionUrl}/capabilities`, { signal: AbortSignal.timeout(2000) });
   if (response.status === 404) return { ok: false, legacy: true };
   if (!response.ok) return responseJson(response);
   const capabilities = await responseJson(response);
   const compatibility = assessCapabilities(capabilities);
   return compatibility.ok ? { ok: true, capabilities } : compatibility;
+}
+
+async function requestProjects() {
+  const response = await fetch(`${companionUrl}/projects`, { signal: AbortSignal.timeout(2000) });
+  const result = await responseJson(response);
+  if (!response.ok || !result.ok || !Array.isArray(result.projects)) {
+    throw new Error(result.error || `Companion returned HTTP ${response.status} while loading projects.`);
+  }
+  return result.projects;
+}
+
+async function getProjects(force = false) {
+  return cachedProjects({ storage: chrome.storage.local, fetchProjects: requestProjects, force });
 }
 
 async function saveWithLegacyCompanion(bookmark) {
@@ -28,6 +42,7 @@ async function saveWithLegacyCompanion(bookmark) {
   const response = await fetch(`${companionUrl}/bookmarks`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    signal: AbortSignal.timeout(5000),
     body: JSON.stringify(supported)
   });
   const result = await responseJson(response);
@@ -53,11 +68,12 @@ async function captureContext(device) {
   };
 }
 
-async function saveBookmark(bookmark, device) {
+async function saveBookmark(bookmark, device, projectId) {
   const capture = await captureContext(device);
   bookmark = {
     ...bookmark,
     capture,
+    ...(projectId ? { project_id: projectId } : {}),
     ...((bookmark.shared_by || bookmark.shared_via) ? { share_event_id: capture.id } : {})
   };
   const capabilityResult = await getCapabilities();
@@ -72,6 +88,7 @@ async function saveBookmark(bookmark, device) {
   const response = await fetch(`${companionUrl}/bookmarks`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    signal: AbortSignal.timeout(5000),
     body: JSON.stringify({ client, bookmark: supportedBookmark })
   });
   const result = await responseJson(response);
@@ -91,8 +108,10 @@ async function saveBookmark(bookmark, device) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const operation = message?.action === 'save-bookmark'
-    ? saveBookmark(message.bookmark, message.device)
-    : Promise.resolve({ ok: false, error: 'Unsupported browser add-on request.' });
+    ? saveBookmark(message.bookmark, message.device, message.projectId)
+    : message?.action === 'get-projects'
+      ? getProjects(message.force)
+      : Promise.resolve({ ok: false, error: 'Unsupported browser add-on request.' });
   operation.then(sendResponse)
     .catch((error) => sendResponse({ ok: false, error: `Companion unavailable: ${error.message}` }));
   return true;

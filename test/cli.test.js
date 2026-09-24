@@ -54,6 +54,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /--saved-within day\|week\|month\|year/);
   assert.match(generalHelp.stdout, /--saved-since YYYY-MM-DD/);
   assert.match(generalHelp.stdout, /open QUERY .*--pick NUMBER.*--with BROWSER.*--dry-run/);
+  assert.match(generalHelp.stdout, /project create --title TITLE .*project list .*project open PROJECT/);
   assert.match(generalHelp.stdout, /vault init \[--path PATH\]/);
   assert.match(generalHelp.stdout, /vault skill-install \[--path PATH\]/);
   assert.match(generalHelp.stdout, /vault status/);
@@ -112,6 +113,11 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /find database --browser --with firefox/);
   assert.match(openHelp.stdout, /open triper --fuzzy/);
   assert.match(openHelp.stdout, /Docker cannot launch a host application/);
+
+  const projectHelp = await run(process.execPath, [cli, 'project', '--help']);
+  assert.match(projectHelp.stdout, /Create ordered bookmark projects and present them as browser tabs/);
+  assert.match(projectHelp.stdout, /move PROJECT BOOKMARK --to NUMBER/);
+  assert.match(projectHelp.stdout, /project open ai-assisted-app-talk --dry-run/);
 
   const vaultHelp = await run(process.execPath, [cli, 'vault', '--help']);
   assert.match(vaultHelp.stdout, /vault skill-install \[--path PATH\]/);
@@ -419,7 +425,7 @@ test('TUI commands initialize, save, find, install the vault skill, and dry-run 
   const vaultStatus = await run(process.execPath, [cli, 'vault', 'status'], { env });
   assert.match(vaultStatus.stdout, /Bookmark vault status/);
   assert.match(vaultStatus.stdout, /Bookmarks: 1/);
-  assert.match(vaultStatus.stdout, /Schema: 3 \(current\)/);
+  assert.match(vaultStatus.stdout, /Schema: 4 \(current\)/);
   assert.match(vaultStatus.stdout, /Record checks: passed \(IDs, URLs, saved dates, duplicate IDs\/URLs\)/);
   assert.match(vaultStatus.stdout, /Git: not initialized/);
   assert.match(vaultStatus.stdout, /See vault Git help: npm run bookmark -- vault git-help/);

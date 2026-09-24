@@ -1,4 +1,4 @@
-export const EXTENSION_API_PROTOCOL = 2;
+export const EXTENSION_API_PROTOCOL = 3;
 
 export function extensionClient(version) {
   return {

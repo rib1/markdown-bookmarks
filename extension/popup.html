@@ -22,6 +22,10 @@
     </select>
   </label>
   <input id="tags" placeholder="tags, comma-separated" autofocus>
+  <label>Project (optional)
+    <select id="project" disabled><option value="">Loading projects…</option></select>
+  </label>
+  <button id="refresh-projects" type="button">Refresh projects</button>
   <label>Shared by (optional)
     <input id="shared-by" list="recent-senders" placeholder="Name">
     <datalist id="recent-senders"></datalist>

@@ -38,7 +38,11 @@ Paths are relative to this vault root:
 
 - `bookmarks/YYYY/MM/` contains bookmark Markdown files. Year/month directories
   are storage organization based on save time, not semantic categories.
-- `projects/` contains project records with stable IDs.
+- `projects/` contains project records with stable IDs. A project may have an
+  ordered `bookmarks` list of stable bookmark IDs; this is a reusable browser-tab
+  presentation sequence, not a copy of bookmark content. Each entry may include
+  an ordered `notes` list of short presenter cues that stays with the bookmark
+  when order changes. Older single `note` values are migrated to this list.
 - `events/` contains time-bound event records with stable IDs.
 - `assets/` may contain content associated with bookmark IDs.
 - `views/` may contain generated, disposable views. Never treat them as the
@@ -78,8 +82,10 @@ frontmatter includes:
   `follow-up`, and `duplicate`
 
 Records may also use `areas`, `projects`, and `events` for classification and
-many-to-many relationships. Inspect existing project and event records before
-assuming a detailed schema for them.
+many-to-many relationships. When adding a bookmark to a project, maintain both
+the project's ordered `bookmarks` list and the bookmark's `projects` list.
+Report missing references; do not silently discard or invent them. Inspect
+existing project and event records before assuming other detailed fields.
 
 Preserve unknown metadata. Keep access history separate from saved-page content.
 Keep the page `author`, link sender, and save device distinct. A bookmark can

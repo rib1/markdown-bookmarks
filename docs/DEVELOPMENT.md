@@ -78,6 +78,25 @@ Keep these concepts distinct:
 - `capture_history`: browser-save provenance such as device label, OS, browser, and extension version
 - `summary`: deterministic or user-written summary; capture must not require an LLM
 
+## Projects
+
+Project records in `projects/` are ordinary Markdown with a stable `id`, title,
+status, optional contexts/tags, and an ordered `bookmarks` list of stable
+bookmark IDs. The order is a reusable browser-tab presentation sequence. Each
+linked bookmark also lists the project ID in its `projects` metadata, so a
+bookmark may participate in several projects. Each project bookmark entry has
+an ordered `notes` list of short presenter cues; preserve it when reordering
+entries. Schema v4 migrates earlier single `note` values to this list.
+Preserve unknown project metadata.
+
+The browser extension may submit an optional `project_id` with a save. The
+local API validates the project before saving, then appends the saved bookmark
+ID to its ordered list. `GET /projects` exposes only project ID, title, and
+status for the extension selector. The extension caches that list locally for
+five minutes; an unavailable companion must leave saving and the popup usable.
+Do not add real project records or URLs to this public repository; tests use
+synthetic data only.
+
 ## Save and duplicate rules
 
 - Normalize URLs before comparison.
@@ -110,7 +129,8 @@ Schema version 1 adds per-bookmark `schema_version`, backfills safe core fields,
 renames `first_opened_at`, `last_opened_at`, and `access_count` to their `saved`
 equivalents, and removes save-history values accidentally copied into `tags`.
 Context values that also appear as tags are retained because they may be
-intentional. Vault initialization and migration also ignore macOS `.DS_Store`
+intentional. Schema version 4 converts each project bookmark's single `note`
+to an ordered `notes` list. Vault initialization and migration also ignore macOS `.DS_Store`
 files and `views/.search-results/` without replacing existing `.gitignore`
 rules.
 

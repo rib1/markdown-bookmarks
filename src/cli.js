@@ -22,6 +22,11 @@ import {
 import { isVaultInitialized } from './vault-state.js';
 import { fixVaultTags, lintVaultTags } from './tag-maintenance.js';
 import { inspectVaultStatus, renderVaultStatus } from './vault-status.js';
+import {
+  addProjectBookmark, createProject, listProjects, moveProjectBookmark,
+  projectBookmarks, removeProjectBookmark, addProjectBookmarkNote, removeProjectBookmarkNote
+} from './projects.js';
+import { parseProjectArguments } from './tui-project-arguments.js';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -312,6 +317,50 @@ paths or commands available on PATH. Docker cannot launch a host application,
 so the Docker command prints the selected URL for opening on the host.`);
 }
 
+function printProjectHelp() {
+  console.log(`Usage: npm run bookmark -- project COMMAND [options]
+
+Create ordered bookmark projects and present them as browser tabs.
+
+Commands:
+  create --title TITLE [--id ID] [--status STATUS] [--contexts LIST] [--tags LIST] [--purpose TEXT] [--notes TEXT]
+  list
+  show PROJECT
+  add PROJECT BOOKMARK [--note TEXT]
+  remove PROJECT BOOKMARK
+  move PROJECT BOOKMARK --to NUMBER
+  note add PROJECT BOOKMARK --note TEXT
+  note remove PROJECT BOOKMARK --pick NUMBER
+  open PROJECT [--with BROWSER] [--dry-run]
+
+PROJECT and BOOKMARK accept a full stable ID or a unique ID prefix. Project
+show also accepts a unique exact title. The project owns tab order; bookmarks
+may belong to many projects. --dry-run prints the tab sequence without opening it.
+
+Examples:
+  npm run bookmark -- project create --id ai-assisted-app-talk --title "AI-assisted application talk"
+  npm run bookmark -- project add ai-assisted-app-talk d34db33f --note "Explain why this is the opening tab."
+  npm run bookmark -- project note add ai-assisted-app-talk d34db33f --note "Another presenter cue."
+  npm run bookmark -- project note remove ai-assisted-app-talk d34db33f --pick 2
+  npm run bookmark -- project move ai-assisted-app-talk d34db33f --to 1
+  npm run bookmark -- project show ai-assisted-app-talk
+  npm run bookmark -- project open ai-assisted-app-talk --with chrome
+  npm run bookmark -- project open ai-assisted-app-talk --dry-run`);
+}
+
+function printProject(project, entries) {
+  console.log(`${project.title || '(untitled project)'} [${project.id || 'missing ID'}]`);
+  console.log(`STATUS: ${project.status}`);
+  if (!entries.length) console.log('No bookmarks linked. Use project add PROJECT BOOKMARK.');
+  entries.forEach((entry, index) => {
+    if (entry.missing) console.log(`${index + 1}. MISSING [${entry.id}]`);
+    else {
+      console.log(`${index + 1}. ${entry.title || '(untitled)'} [${String(entry.id).slice(0, 8)}]\n   URL: ${entry.url || '(missing URL)'}`);
+      entry.notes.forEach((note, noteIndex) => console.log(`   NOTE ${noteIndex + 1}: ${note}`));
+    }
+  });
+}
+
 function printHelp() {
   console.log(`Markdown Bookmarks commands:
   vault init [--path PATH]
@@ -324,6 +373,7 @@ function printHelp() {
   save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
   find [QUERY] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
   open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
+  project create --title TITLE [--id ID] | project list | project show PROJECT | project add PROJECT BOOKMARK [--note TEXT] | project open PROJECT [--with BROWSER] [--dry-run]
 
 npm syntax:
   Keep the "--" in "npm run bookmark -- COMMAND". It forwards options such as
@@ -352,6 +402,7 @@ Common workflows:
   npm run bookmark -- vault git-help
   npm run bookmark -- vault open
   npm run bookmark -- vault tag-lint
+  npm run bookmark -- project create --id my-talk --title "My tab presentation"
   npm run bookmark -- save --url https://example.test/page --shared-by Alice --via Signal
   npm run bookmark -- find database
   npm run bookmark -- open database --pick 3
@@ -400,7 +451,8 @@ async function printNamedHelp(name) {
   const printers = {
     save: printSaveHelp,
     find: printFindHelp,
-    open: printOpenHelp
+    open: printOpenHelp,
+    project: printProjectHelp
   };
   const printer = printers[name];
   if (!printer) throw new Error(`Unknown command: ${name}. Run npm run bookmark -- help.`);
@@ -460,6 +512,71 @@ async function runTui() {
         }));
       }
     }
+    return;
+  }
+  if (command === 'project') {
+    const request = parseProjectArguments(args);
+    if (request.help) return printProjectHelp();
+    const root = vaultRoot();
+    if (!await isVaultInitialized(root)) {
+      throw new Error(`Vault is not initialized at: ${root}\nFirst run: npm run bookmark -- vault init`);
+    }
+    if (request.action === 'create') {
+      const result = await createProject({
+        id: request.id, title: request.title, status: request.status,
+        contexts: (request.contexts || '').split(','), tags: (request.tags || '').split(','),
+        purpose: request.purpose, notes: request.notes
+      }, root);
+      console.log(`Project created: ${result.title} [${result.id}]`);
+      return;
+    }
+    if (request.action === 'list') {
+      const projects = await listProjects(root);
+      if (!projects.length) console.log('No projects found. Use project create --title TITLE.');
+      else projects.forEach((project, index) => console.log(`${index + 1}. ${project.title || '(untitled)'} [${project.id || 'missing ID'}] — ${project.bookmarks.length} bookmark${project.bookmarks.length === 1 ? '' : 's'}`));
+      return;
+    }
+    if (request.action === 'add') {
+      const result = await addProjectBookmark(request.project, request.bookmark, root, { note: request.note });
+      console.log(result.added ? `Bookmark added to project: ${result.project}` : result.noteAdded ? `Bookmark note added: ${result.project}` : `Bookmark already belongs to project: ${result.project}`);
+      return;
+    }
+    if (request.action === 'remove') {
+      const result = await removeProjectBookmark(request.project, request.bookmark, root);
+      console.log(result.removed ? `Bookmark removed from project: ${result.project}` : `Bookmark was not linked to project: ${result.project}`);
+      return;
+    }
+    if (request.action === 'move') {
+      const result = await moveProjectBookmark(request.project, request.bookmark, request.to, root);
+      console.log(`Bookmark moved to tab ${result.position}: ${result.project}`);
+      return;
+    }
+    if (request.action === 'note') {
+      if (request.noteAction === 'remove') {
+        const result = await removeProjectBookmarkNote(request.project, request.bookmark, request.pick, root);
+        console.log(`Bookmark note removed: ${result.project}`);
+      } else {
+        const result = await addProjectBookmarkNote(request.project, request.bookmark, request.note, root);
+        console.log(`Bookmark note added (${result.noteCount} total): ${result.project}`);
+      }
+      return;
+    }
+    const result = await projectBookmarks(request.project, root);
+    if (request.action === 'show') return printProject(result.project, result.entries);
+    const missing = result.entries.filter((entry) => entry.missing);
+    if (missing.length) throw new Error(`Project has ${missing.length} missing bookmark reference${missing.length === 1 ? '' : 's'}: ${missing.map((entry) => entry.id).join(', ')}`);
+    const unsafe = result.entries.filter((entry) => !/^https?:\/\//i.test(entry.url || ''));
+    if (unsafe.length) throw new Error(`Project has bookmark(s) without safe HTTP URLs: ${unsafe.map((entry) => entry.id).join(', ')}`);
+    if (request.dryRun || process.env.BOOKMARK_RESULTS_HOST_VAULT) {
+      result.entries.forEach((entry, index) => console.log(`${index + 1}. ${entry.url}`));
+      if (process.env.BOOKMARK_RESULTS_HOST_VAULT && !request.dryRun) console.log('Open these project tabs on the host browser.');
+      return;
+    }
+    for (const [index, entry] of result.entries.entries()) {
+      const launched = await launchBrowserOrExplain(entry.url, request.withBrowser);
+      if (!launched) throw new Error(`Stopped before tab ${index + 2} of ${result.entries.length}`);
+    }
+    console.log(`Opened ${result.entries.length} project tab${result.entries.length === 1 ? '' : 's'}.`);
     return;
   }
   if (command === 'save') {

@@ -3,8 +3,8 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { version: companionVersion } = require('../package.json');
 
-export const API_PROTOCOL_VERSION = 2;
-export const MINIMUM_EXTENSION_PROTOCOL = 2;
+export const API_PROTOCOL_VERSION = 3;
+export const MINIMUM_EXTENSION_PROTOCOL = 3;
 
 export const BOOKMARK_INPUT_FIELDS = [
   'url',
@@ -19,7 +19,8 @@ export const BOOKMARK_INPUT_FIELDS = [
   'shared_by',
   'shared_via',
   'share_event_id',
-  'capture'
+  'capture',
+  'project_id'
 ];
 
 export const DEPRECATED_BOOKMARK_FIELDS = { sender: 'shared_by' };
@@ -44,7 +45,8 @@ export function apiCapabilities(bookmarkSchemaVersion) {
     features: {
       share_history: 1,
       capture_history: 1,
-      processed_field_receipt: 1
+      processed_field_receipt: 1,
+      project_linking: 1
     },
     accepted_fields: [...BOOKMARK_INPUT_FIELDS],
     deprecated_fields: { ...DEPRECATED_BOOKMARK_FIELDS }

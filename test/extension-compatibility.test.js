@@ -57,6 +57,10 @@ test('popup defers companion compatibility checks until the user saves', async (
   const popup = await fs.readFile(new URL('../extension/popup.js', import.meta.url), 'utf8');
   assert.doesNotMatch(popup, /get-capabilities|capabilities/);
   assert.match(popup, /action: 'save-bookmark'/);
+  assert.match(popup, /action: 'get-projects'/);
+  assert.match(popup, /No project \(companion unavailable\)/);
+  const background = await fs.readFile(new URL('../extension/background.js', import.meta.url), 'utf8');
+  assert.match(background, /AbortSignal\.timeout\(2000\)/);
 });
 
 test('formats successful partial saves with visible compatibility warnings', () => {

@@ -4,6 +4,7 @@ const form = document.querySelector('#form');
 const resultOutput = document.querySelector('#result');
 const sharedByInput = document.querySelector('#shared-by');
 const deviceInput = document.querySelector('#device');
+const projectInput = document.querySelector('#project');
 
 async function loadRecentSenders() {
   const { recentSenders = [], deviceLabel = '' } = await chrome.storage.local.get(['recentSenders', 'deviceLabel']);
@@ -23,6 +24,23 @@ async function rememberSender(sender) {
 }
 
 loadRecentSenders();
+
+async function loadProjects(force = false) {
+  try {
+    const response = await chrome.runtime.sendMessage({ action: 'get-projects', force });
+    const projects = response?.projects || [];
+    projectInput.replaceChildren(
+      new Option('No project', ''),
+      ...projects.map((project) => new Option(project.title || project.id, project.id))
+    );
+  } catch {
+    projectInput.replaceChildren(new Option('No project (companion unavailable)', ''));
+  }
+  projectInput.disabled = false;
+}
+
+loadProjects();
+document.querySelector('#refresh-projects').addEventListener('click', () => loadProjects(true));
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -48,7 +66,9 @@ form.addEventListener('submit', async (event) => {
     ...(sharedVia ? { shared_via: sharedVia } : {}),
   };
   const device = deviceInput.value.trim();
-  const response = await chrome.runtime.sendMessage({ action: 'save-bookmark', bookmark, device });
+  const response = await chrome.runtime.sendMessage({
+    action: 'save-bookmark', bookmark, device, projectId: projectInput.value
+  });
   if (response.ok || response.saved) {
     await rememberSender(sharedBy);
     await chrome.storage.local.set({ deviceLabel: device });

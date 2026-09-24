@@ -8,6 +8,7 @@ import {
 import { BOOKMARK_SCHEMA_VERSION, migrateVault } from './migrations/index.js';
 import { cleanupStaleSearchResultPages } from './search-results-page.js';
 import { saveBookmark, vaultRoot } from './vault.js';
+import { addProjectBookmark, listProjects, resolveProject } from './projects.js';
 
 const port = Number(process.env.PORT || 8787);
 const vault = vaultRoot();
@@ -29,6 +30,10 @@ const server = http.createServer(async (request, response) => {
   if (request.method === 'GET' && request.url === '/capabilities') {
     return send(response, 200, apiCapabilities(BOOKMARK_SCHEMA_VERSION));
   }
+  if (request.method === 'GET' && request.url === '/projects') {
+    const projects = await listProjects(vault);
+    return send(response, 200, { ok: true, projects: projects.map(({ id, title, status }) => ({ id, title, status })) });
+  }
   if (request.method !== 'POST' || request.url !== '/bookmarks') return send(response, 404, { ok: false, error: 'Not found' });
   let raw = '';
   request.setEncoding('utf8');
@@ -36,11 +41,17 @@ const server = http.createServer(async (request, response) => {
   request.on('end', async () => {
     try {
       const parsed = parseBrowserSaveRequest(JSON.parse(raw));
-      const result = await saveBookmark({ ...parsed.bookmark, capture_client: parsed.client }, vault);
+      const { project_id: projectId, ...bookmark } = parsed.bookmark;
+      if (projectId) await resolveProject(projectId, vault);
+      const result = await saveBookmark({ ...bookmark, capture_client: parsed.client }, vault);
+      const project = projectId
+        ? await addProjectBookmark(projectId, result.id, vault)
+        : undefined;
       const body = {
         ok: !parsed.legacyClient,
         saved: true,
         result,
+        ...(project ? { project: { id: project.project, bookmark_id: project.bookmark, added: project.added } } : {}),
         processed_fields: parsed.processedFields,
         ignored_fields: parsed.ignoredFields,
         warnings: parsed.warnings
@@ -66,7 +77,7 @@ server.listen(port, '0.0.0.0', () => {
     `bookmark companion started at: ${startedAt}`,
     ...migrationLog,
     ...(migration.migrationsRun.length ? [
-      `vault migration changes: normalized tags: ${migration.normalizedTags}; OS device labels added: ${migration.osLabelsAdded}; canonical URLs updated: ${migration.updatedCanonicalUrls}`
+      `vault migration changes: normalized tags: ${migration.normalizedTags}; OS device labels added: ${migration.osLabelsAdded}; canonical URLs updated: ${migration.updatedCanonicalUrls}; project notes migrated: ${migration.projectNotesMigrated}`
     ] : []),
     `vault AGENTS.md: ${migration.agentInstructions}`,
     `stale search-result pages purged: ${purgedSearchPages}`,

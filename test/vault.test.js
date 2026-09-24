@@ -99,7 +99,8 @@ Legacy data.
   assert.deepEqual(first.migrationsRun, [
     { script: '001-bookmark-schema-v1.js', fromVersion: 0, toVersion: 1 },
     { script: '002-normalize-tags-and-capture-labels.js', fromVersion: 1, toVersion: 2 },
-    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 }
+    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 },
+    { script: '004-project-notes-v2.js', fromVersion: 3, toVersion: 4 }
   ]);
   assert.equal(first.scanned, 1);
   assert.equal(first.migrated, 1);
@@ -163,7 +164,8 @@ save_history:
   const migrated = await fs.readFile(file, 'utf8');
   assert.deepEqual(first.migrationsRun, [
     { script: '002-normalize-tags-and-capture-labels.js', fromVersion: 1, toVersion: 2 },
-    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 }
+    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 },
+    { script: '004-project-notes-v2.js', fromVersion: 3, toVersion: 4 }
   ]);
   assert.equal(first.normalizedTags, 3);
   assert.equal(first.osLabelsAdded, 1);
@@ -172,7 +174,7 @@ save_history:
     { id: 'mac-capture', os: 'mac', browser: 'Google Chrome', device: 'mac' },
     { id: 'custom-capture', device: 'home-mac', os: 'mac', custom: 'preserved' }
   ]);
-  assert.match(migrated, /schema_version: 3/);
+  assert.match(migrated, /schema_version: 4/);
 
   const second = await migrateVault(root);
   assert.equal(second.skipped, true);
@@ -232,16 +234,17 @@ save_history:
 
   const migrationResult = await migrateVault(root);
   assert.deepEqual(migrationResult.migrationsRun, [
-    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 }
+    { script: '003-canonical-urls.js', fromVersion: 2, toVersion: 3 },
+    { script: '004-project-notes-v2.js', fromVersion: 3, toVersion: 4 }
   ]);
   assert.equal(migrationResult.updatedCanonicalUrls, 2);
 
   const migratedYt = await fs.readFile(ytFile, 'utf8');
-  assert.match(migratedYt, /schema_version: 3/);
+  assert.match(migratedYt, /schema_version: 4/);
   assert.match(migratedYt, /canonical_url: "https:\/\/www\.youtube\.com\/watch\?v=dQw4w9WgXcQ"/);
 
   const migratedGeneric = await fs.readFile(genericFile, 'utf8');
-  assert.match(migratedGeneric, /schema_version: 3/);
+  assert.match(migratedGeneric, /schema_version: 4/);
   assert.match(migratedGeneric, /canonical_url: "https:\/\/example\.com\/article"/);
 
   const duplicateSave = await saveBookmark({
@@ -255,6 +258,37 @@ save_history:
   const updatedYt = await fs.readFile(ytFile, 'utf8');
   assert.deepEqual(metadataList(updatedYt, 'tags'), ['music', 'classic', 'youtube']);
   assert.match(updatedYt, /save_count: 2/);
+});
+
+test('migrates each project bookmark note into an ordered notes list once', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-project-notes-'));
+  const projectDirectory = path.join(root, 'projects');
+  const projectFile = path.join(projectDirectory, 'talk.md');
+  await fs.mkdir(projectDirectory, { recursive: true });
+  await fs.writeFile(path.join(root, '.markdown-bookmarks.json'), '{"schema_version":3}\n', 'utf8');
+  await fs.writeFile(projectFile, `---
+id: "talk"
+title: "Talk"
+bookmarks:
+  - {"id":"one","note":"First cue","custom":"preserved"}
+  - "two"
+---
+`, 'utf8');
+
+  const first = await migrateVault(root);
+  const migrated = await fs.readFile(projectFile, 'utf8');
+  assert.deepEqual(first.migrationsRun, [
+    { script: '004-project-notes-v2.js', fromVersion: 3, toVersion: 4 }
+  ]);
+  assert.equal(first.projectNotesMigrated, 1);
+  assert.deepEqual(metadataList(migrated, 'bookmarks'), [
+    { id: 'one', custom: 'preserved', notes: ['First cue'] },
+    { id: 'two', notes: [] }
+  ]);
+  const second = await migrateVault(root);
+  assert.equal(second.skipped, true);
+  assert.equal(second.projectNotesMigrated, 0);
+  assert.equal(await fs.readFile(projectFile, 'utf8'), migrated);
 });
 
 test('installs and refreshes vault AGENTS.md when migrations are checked', async () => {
@@ -277,6 +311,8 @@ test('installs and refreshes vault AGENTS.md when migrations are checked', async
   assert.match(template, /Keep tags lowercase and remove duplicates/);
   assert.match(template, /Do not merge similar tags automatically/);
   assert.match(template, /Keep this managed `AGENTS\.md` versioned in the private vault/);
+  assert.match(template, /ordered `bookmarks` list/);
+  assert.match(template, /do not silently discard or invent them/);
 
   await fs.writeFile(target, 'stale vault instructions\n', 'utf8');
   const second = await migrateVault(root);
@@ -400,7 +436,7 @@ test('stores optional sender history without changing the schema or empty bookma
   }, root);
   const content = await fs.readFile(first.file, 'utf8');
   const shares = metadataList(content, 'share_history');
-  assert.equal(BOOKMARK_SCHEMA_VERSION, 3);
+  assert.equal(BOOKMARK_SCHEMA_VERSION, 4);
   assert.equal(shares.length, 2);
   assert.deepEqual(shares[0], {
     id: 'share-one', sender: 'Alice', channel: 'Signal',

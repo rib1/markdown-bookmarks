@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { findBookmarks } from '../src/vault.js';
 import { API_PROTOCOL_VERSION } from '../src/api-contract.js';
+import { createProject, projectBookmarks } from '../src/projects.js';
 
 function browserRequest(bookmark, apiProtocol = API_PROTOCOL_VERSION) {
   return {
@@ -55,6 +56,7 @@ access_count: 1
 ## Summary
 
 `, 'utf8');
+  await createProject({ id: 'server-project', title: 'Server project' }, bookmarkVault);
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: path.resolve('.'),
     env: {
@@ -90,10 +92,10 @@ access_count: 1
   assert.match(message, /vault migration changes: normalized tags: 0; OS device labels added: 0; canonical URLs updated: 0/);
   assert.match(message, /vault AGENTS\.md: installed/);
   assert.match(message, /stale search-result pages purged: 1/);
-  assert.match(message, /schema: 3; migrated: 1/);
+  assert.match(message, /schema: 4; migrated: 1/);
   await assert.rejects(() => fs.access(staleResult), { code: 'ENOENT' });
   const migratedLegacy = await fs.readFile(legacyFile, 'utf8');
-  assert.match(migratedLegacy, /schema_version: 3/);
+  assert.match(migratedLegacy, /schema_version: 4/);
   assert.match(migratedLegacy, /save_count: 1/);
   assert.doesNotMatch(migratedLegacy, /first_opened_at:|last_opened_at:|access_count:/);
 
@@ -101,9 +103,15 @@ access_count: 1
   const capabilities = await capabilitiesResponse.json();
   assert.equal(capabilitiesResponse.status, 200);
   assert.equal(capabilities.api_protocol, API_PROTOCOL_VERSION);
-  assert.equal(capabilities.bookmark_schema_version, 3);
+  assert.equal(capabilities.bookmark_schema_version, 4);
   assert.equal(capabilities.features.share_history, 1);
   assert.equal(capabilities.features.capture_history, 1);
+  assert.equal(capabilities.features.project_linking, 1);
+  const projectsResponse = await fetch(`http://127.0.0.1:${port}/projects`);
+  assert.equal(projectsResponse.status, 200);
+  assert.deepEqual((await projectsResponse.json()).projects, [
+    { id: 'server-project', title: 'Server project', status: 'active' }
+  ]);
 
   const legacyResponse = await fetch(`http://127.0.0.1:${port}/bookmarks`, {
     method: 'POST',
@@ -147,7 +155,8 @@ access_count: 1
       capture: {
         id: 'server-capture', os: 'mac', architecture: 'arm64',
         browser: 'Google Chrome', browser_version: '140', device: 'home-mac'
-      }
+      },
+      project_id: 'server-project'
     }))
   });
 
@@ -156,6 +165,10 @@ access_count: 1
   assert.deepEqual(savedResponse.warnings, []);
   assert.ok(savedResponse.processed_fields.includes('shared_by'));
   assert.ok(savedResponse.processed_fields.includes('capture'));
+  assert.ok(savedResponse.processed_fields.includes('project_id'));
+  assert.deepEqual(savedResponse.project, {
+    id: 'server-project', bookmark_id: savedResponse.result.id, added: true
+  });
   assert.equal((await findBookmarks('native-server', bookmarkVault)).length, 1);
   const savedContent = (await findBookmarks('native-server', bookmarkVault))[0].content;
   assert.match(savedContent, /"sender":"Alice"/);
@@ -166,5 +179,6 @@ access_count: 1
   assert.match(savedContent, /"architecture":"arm64"/);
   assert.match(savedContent, /"browser":"Google Chrome"/);
   assert.match(savedContent, /"browser_version":"140"/);
+  assert.deepEqual((await projectBookmarks('server-project', bookmarkVault)).entries.map((entry) => entry.id), [savedResponse.result.id]);
   assert.equal((await findBookmarks('', vaultPath)).length, 0);
 });

@@ -178,11 +178,19 @@ and save the page. Inspect the generated Markdown file in the private vault.
 3. Enter comma-separated tags, such as `work,database,reference`. Tags are
    stored in lowercase and duplicate spellings that differ only by case are
    combined.
-4. If someone sent the link, optionally enter their name in **Shared by** and
+4. Optionally choose a project. The saved tab is appended to that project's
+   browser-tab order. The extension caches the local project list for five
+   minutes, so reopening the popup does not repeatedly query the companion.
+   Use **Refresh projects** after creating a project through the CLI if it is
+   not yet shown.
+   If the companion is unavailable, the selector remains usable as **No
+   project** and saving shows a clear connection error instead of blocking the
+   popup.
+5. If someone sent the link, optionally enter their name in **Shared by** and
    the channel in **Via**.
-5. Optionally expand **Save source** and set a memorable device label such as
+6. Optionally expand **Save source** and set a memorable device label such as
    `home-mac` or `work-windows`. The label is remembered locally.
-6. Click **Save current tab**.
+7. Click **Save current tab**.
 
 The companion creates a file under:
 
@@ -215,6 +223,31 @@ tracks when the URL identifies that page type. The artist subdomain is used as
 the author only when the page did not provide an author.
 Imgur bookmarks receive the `imgur` tag, their image/album/gallery type, and an
 `imgur_id` when the URL contains a valid resource ID.
+
+## Present a project as browser tabs
+
+A project is an ordered list of saved bookmarks. The project owns the tab order,
+while each bookmark can belong to more than one project. Create a project, add
+the short IDs printed by `find`, and preview the sequence before opening it:
+
+```powershell
+npm run bookmark -- project create --id ai-assisted-app-talk --title "AI-assisted application talk"
+npm run bookmark -- find amiga
+npm run bookmark -- project add ai-assisted-app-talk d34db33f
+npm run bookmark -- project note add ai-assisted-app-talk d34db33f --note "Explain why this tab matters."
+npm run bookmark -- project note remove ai-assisted-app-talk d34db33f --pick 1
+npm run bookmark -- project show ai-assisted-app-talk
+npm run bookmark -- project open ai-assisted-app-talk --dry-run
+npm run bookmark -- project open ai-assisted-app-talk --with chrome
+```
+
+`project open` opens each safe HTTP/HTTPS URL in order. It refuses to launch a
+partial presentation when a referenced bookmark is missing or has no safe URL.
+In Docker it prints the ordered URLs for opening on the host browser.
+Use `--note` with `project add`, or `project note add` later, for numbered
+presenter cues shown by `project show`. Add as many as needed; `project note
+remove --pick NUMBER` deletes only that cue. Notes stay attached when tabs are
+reordered.
 
 ## Command help
 

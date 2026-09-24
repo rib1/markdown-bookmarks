@@ -16,11 +16,12 @@ function request(bookmark, protocol = API_PROTOCOL_VERSION) {
 test('advertises API compatibility independently from the bookmark schema', () => {
   const capabilities = apiCapabilities(1);
   assert.equal(capabilities.app_version, '0.2.0');
-  assert.equal(capabilities.api_protocol, 2);
-  assert.equal(capabilities.minimum_extension_protocol, 2);
+  assert.equal(capabilities.api_protocol, 3);
+  assert.equal(capabilities.minimum_extension_protocol, 3);
   assert.equal(capabilities.bookmark_schema_version, 1);
   assert.equal(capabilities.features.share_history, 1);
   assert.equal(capabilities.features.capture_history, 1);
+  assert.equal(capabilities.features.project_linking, 1);
   assert.ok(capabilities.accepted_fields.includes('shared_by'));
   assert.ok(capabilities.accepted_fields.includes('capture'));
   assert.deepEqual(capabilities.deprecated_fields, { sender: 'shared_by' });
@@ -37,6 +38,14 @@ test('accepts the current extension envelope and reports every processed field',
   assert.deepEqual(parsed.warnings, []);
 });
 
+test('accepts an optional project reference as a browser-save field', () => {
+  const parsed = parseBrowserSaveRequest(request({
+    url: 'https://example.test/project', project_id: 'ai-talk'
+  }));
+  assert.equal(parsed.bookmark.project_id, 'ai-talk');
+  assert.ok(parsed.processedFields.includes('project_id'));
+});
+
 test('accepts legacy and future add-on protocols with actionable update warnings', () => {
   const legacy = parseBrowserSaveRequest({ url: 'https://example.test/legacy' });
   assert.equal(legacy.legacyClient, true);
@@ -45,7 +54,7 @@ test('accepts legacy and future add-on protocols with actionable update warnings
 
   const old = parseBrowserSaveRequest(request({ url: 'https://example.test/old' }, 1));
   assert.match(old.warnings[0].message, /Reload or update.*browser add-on/);
-  const future = parseBrowserSaveRequest(request({ url: 'https://example.test/future' }, 3));
+  const future = parseBrowserSaveRequest(request({ url: 'https://example.test/future' }, API_PROTOCOL_VERSION + 1));
   assert.match(future.warnings[0].message, /newer than the companion/i);
 });
 
