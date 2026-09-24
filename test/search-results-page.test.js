@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { browserCommand, openInBrowser } from '../src/browser-launcher.js';
+import { browserCommand, browserWindowCommand, openInBrowser } from '../src/browser-launcher.js';
 import {
   cleanupStaleSearchResultPages,
   createSearchResultsPage,
@@ -115,6 +115,31 @@ test('selects safe native browser launcher commands', () => {
   assert.deepEqual(browserCommand(target, 'win32', 'C:\\Apps\\browser.exe'),
     { command: 'C:\\Apps\\browser.exe', args: [target] });
   assert.throws(() => browserCommand(target, 'linux', 'safari'), /not supported on linux/);
+});
+
+test('locates Chrome in standard Windows installation directories before using PATH', () => {
+  const target = 'https://example.test';
+  const chromePath = 'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe';
+  const command = browserCommand(target, 'win32', 'chrome', {
+    environment: {
+      ProgramFiles: 'C:\\Program Files',
+      'ProgramFiles(x86)': 'C:\\Program Files (x86)',
+      LOCALAPPDATA: 'C:\\Users\\example\\AppData\\Local'
+    },
+    exists: (candidate) => candidate === chromePath
+  });
+  assert.deepEqual(command, { command: chromePath, args: [target] });
+});
+
+test('builds a fresh browser window command with every project tab', () => {
+  const targets = ['https://example.test/first', 'https://example.test/second'];
+  assert.deepEqual(browserWindowCommand(targets, 'win32', 'chrome'), {
+    command: 'chrome.exe', args: ['--new-window', ...targets]
+  });
+  assert.deepEqual(browserWindowCommand(targets, 'win32', 'firefox'), {
+    command: 'firefox.exe', args: ['-new-window', ...targets]
+  });
+  assert.throws(() => browserWindowCommand(targets, 'win32'), /requires --with BROWSER/);
 });
 
 test('detects a macOS browser application that cannot be opened', async () => {

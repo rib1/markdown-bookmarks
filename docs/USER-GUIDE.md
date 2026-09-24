@@ -241,9 +241,10 @@ npm run bookmark -- project open ai-assisted-app-talk --dry-run
 npm run bookmark -- project open ai-assisted-app-talk --with chrome
 ```
 
-`project open` opens each safe HTTP/HTTPS URL in order. It refuses to launch a
-partial presentation when a referenced bookmark is missing or has no safe URL.
-In Docker it prints the ordered URLs for opening on the host browser.
+`project open` opens every safe HTTP/HTTPS URL as tabs in one new browser
+window; pass a browser with `--with` (for example `--with chrome`). It refuses
+to launch a partial presentation when a referenced bookmark is missing or has
+no safe URL. In Docker it prints the ordered URLs for opening on the host browser.
 Use `--note` with `project add`, or `project note add` later, for numbered
 presenter cues shown by `project show`. Add as many as needed; `project note
 remove --pick NUMBER` deletes only that cue. Notes stay attached when tabs are

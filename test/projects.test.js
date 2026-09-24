@@ -62,6 +62,10 @@ test('project TUI prints ordered tabs in dry-run mode and reports broken referen
   const dryRun = await run(process.execPath, [cli, 'project', 'open', 'demo', '--dry-run'], { env: environment });
   assert.match(dryRun.stdout, /1\. https:\/\/example\.test\/intro/);
   assert.match(dryRun.stdout, /2\. http:\/\/localhost:5000\//);
+  await assert.rejects(
+    () => run(process.execPath, [cli, 'project', 'open', 'demo'], { env: environment }),
+    /requires --with BROWSER to open in a new browser window/
+  );
   const show = await run(process.execPath, [cli, 'project', 'show', 'demo'], { env: environment });
   assert.match(show.stdout, /Demo \[demo\]/);
   assert.match(show.stdout, /Intro \[intro-ta\]/);
@@ -79,4 +83,23 @@ test('project TUI prints ordered tabs in dry-run mode and reports broken referen
   content = content.replace('"id":"local-tab"', '"id":"removed-tab"');
   await fs.writeFile(projectFile, content, 'utf8');
   await assert.rejects(() => run(process.execPath, [cli, 'project', 'open', 'demo', '--dry-run'], { env: environment }), /missing bookmark reference/);
+});
+
+test('project open prints every tab for manual opening when the browser cannot launch', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-project-open-failure-'));
+  await initVault(root);
+  await saveBookmark({ id: 'first-tab', url: 'https://example.test/first', title: 'First tab' }, root);
+  await saveBookmark({ id: 'second-tab', url: 'https://example.test/second', title: 'Second tab' }, root);
+  const environment = { ...process.env, BOOKMARK_VAULT: root };
+  await run(process.execPath, [cli, 'project', 'create', '--id', 'demo', '--title', 'Demo'], { env: environment });
+  await run(process.execPath, [cli, 'project', 'add', 'demo', 'first-tab'], { env: environment });
+  await run(process.execPath, [cli, 'project', 'add', 'demo', 'second-tab'], { env: environment });
+
+  await assert.rejects(
+    () => run(process.execPath, [cli, 'project', 'open', 'demo', '--with', path.join(root, 'missing-browser')], { env: environment }),
+    (error) => {
+      assert.match(error.stdout, /Open these project tabs manually:\r?\n1\. https:\/\/example\.test\/first\r?\n2\. https:\/\/example\.test\/second/);
+      return true;
+    }
+  );
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { saveBookmark, findBookmarks, initVault, installVaultSkill, vaultRoot } from './vault.js';
 import { createInterface } from 'node:readline/promises';
-import { openInBrowser } from './browser-launcher.js';
+import { openInBrowser, openInBrowserWindow } from './browser-launcher.js';
 import {
   createSearchResultsPage,
   hostSearchResultsFileUrl
@@ -90,6 +90,23 @@ async function launchBrowserOrExplain(target, browser, { linkAlreadyPrinted = fa
       console.log('Open this link manually:');
       console.log(target);
     }
+    process.exitCode = 1;
+    return false;
+  }
+}
+
+async function launchProjectBrowserOrExplain(entries, browser) {
+  try {
+    await openInBrowserWindow(entries.map((entry) => entry.url), browser);
+    return true;
+  } catch (error) {
+    const browserLabel = browser ? `browser "${browser}"` : 'the selected browser';
+    const reason = error.code === 'ENOENT'
+      ? 'the application or executable was not found'
+      : 'the application could not be opened';
+    console.error(`Could not launch ${browserLabel}: ${reason}.`);
+    console.log('Open these project tabs manually:');
+    entries.forEach((entry, index) => console.log(`${index + 1}. ${entry.url}`));
     process.exitCode = 1;
     return false;
   }
@@ -320,7 +337,7 @@ so the Docker command prints the selected URL for opening on the host.`);
 function printProjectHelp() {
   console.log(`Usage: npm run bookmark -- project COMMAND [options]
 
-Create ordered bookmark projects and present them as browser tabs.
+Create ordered bookmark projects and present them as tabs in a new browser window.
 
 Commands:
   create --title TITLE [--id ID] [--status STATUS] [--contexts LIST] [--tags LIST] [--purpose TEXT] [--notes TEXT]
@@ -335,7 +352,8 @@ Commands:
 
 PROJECT and BOOKMARK accept a full stable ID or a unique ID prefix. Project
 show also accepts a unique exact title. The project owns tab order; bookmarks
-may belong to many projects. --dry-run prints the tab sequence without opening it.
+may belong to many projects. Open requires --with BROWSER so it can force a new
+window. --dry-run prints the tab sequence without opening it.
 
 Examples:
   npm run bookmark -- project create --id ai-assisted-app-talk --title "AI-assisted application talk"
@@ -572,10 +590,9 @@ async function runTui() {
       if (process.env.BOOKMARK_RESULTS_HOST_VAULT && !request.dryRun) console.log('Open these project tabs on the host browser.');
       return;
     }
-    for (const [index, entry] of result.entries.entries()) {
-      const launched = await launchBrowserOrExplain(entry.url, request.withBrowser);
-      if (!launched) throw new Error(`Stopped before tab ${index + 2} of ${result.entries.length}`);
-    }
+    if (!request.withBrowser) throw new Error('project open requires --with BROWSER to open in a new browser window');
+    const launched = await launchProjectBrowserOrExplain(result.entries, request.withBrowser);
+    if (!launched) return;
     console.log(`Opened ${result.entries.length} project tab${result.entries.length === 1 ? '' : 's'}.`);
     return;
   }
