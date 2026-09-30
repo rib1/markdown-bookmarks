@@ -106,6 +106,63 @@ migrated-file count. Review and
 commit resulting private-vault changes with host Git; the companion never
 commits or pushes them.
 
+## Run the companion with WSLc
+
+Windows 11 can run the companion image with WSLc, without Docker Desktop. WSLc
+is included with current WSL releases. Update WSL first, then use the WSLc
+command. Restart PowerShell after updating so the installer-added PATH entry is
+loaded:
+
+```powershell
+wsl --update --web-download
+# Close and reopen PowerShell after the update.
+wslc --help
+```
+
+From the application repository, build the runtime image:
+
+```powershell
+wslc build --tag markdown-bookmarks-wslc:local .
+```
+
+Set the private vault path and start the companion. The example uses a named
+container and mounts the host vault at `/vault` inside the container:
+
+```powershell
+$env:BOOKMARK_VAULT = 'C:\Users\YOUR-NAME\Documents\my-bookmarks'
+wslc run --detach --name markdown-bookmarks-wslc `
+  --publish 127.0.0.1:8787:8787 `
+  --env VAULT_PATH=/vault `
+  --env BOOKMARK_RESULTS_DIR=/vault/views/.search-results `
+  --env PORT=8787 `
+  --volume "${env:BOOKMARK_VAULT}:/vault" `
+  markdown-bookmarks-wslc:local
+```
+
+Check that it is running:
+
+```powershell
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8787/capabilities
+```
+
+Run CLI commands inside the companion container:
+
+```powershell
+wslc exec markdown-bookmarks-wslc node src/cli.js vault status
+wslc exec markdown-bookmarks-wslc node src/cli.js find database
+```
+
+Stop and remove the container when finished:
+
+```powershell
+wslc stop markdown-bookmarks-wslc
+wslc remove markdown-bookmarks-wslc
+```
+
+WSLc does not provide `compose` support yet, so the browser end-to-end suite
+and the multi-service Compose workflow still use Docker Compose. Do not mount
+the private vault into a public application image or add it to this repository.
+
 ## Run without Docker using npm
 
 The Node prototype has no runtime dependencies, so there is no package-install
