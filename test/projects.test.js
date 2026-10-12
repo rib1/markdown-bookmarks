@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { setTimeout as delay } from 'node:timers/promises';
 import { readList } from '../src/bookmark-format.js';
 import {
   addProjectBookmark, addProjectBookmarkNote, createProject, moveProjectBookmark,
@@ -62,10 +63,6 @@ test('project TUI prints ordered tabs in dry-run mode and reports broken referen
   const dryRun = await run(process.execPath, [cli, 'project', 'open', 'demo', '--dry-run'], { env: environment });
   assert.match(dryRun.stdout, /1\. https:\/\/example\.test\/intro/);
   assert.match(dryRun.stdout, /2\. http:\/\/localhost:5000\//);
-  await assert.rejects(
-    () => run(process.execPath, [cli, 'project', 'open', 'demo'], { env: environment }),
-    /requires --with BROWSER to open in a new browser window/
-  );
   const show = await run(process.execPath, [cli, 'project', 'show', 'demo'], { env: environment });
   assert.match(show.stdout, /Demo \[demo\]/);
   assert.match(show.stdout, /Intro \[intro-ta\]/);
@@ -102,4 +99,41 @@ test('project open prints every tab for manual opening when the browser cannot l
       return true;
     }
   );
+});
+
+test('project open without --with launches all tabs through the default browser', { skip: process.platform !== 'linux' }, async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-project-default-'));
+  await initVault(root);
+  const urls = ['https://example.test/first?a=1&b=2', 'https://example.test/second'];
+  await saveBookmark({ id: 'first-tab', url: urls[0], title: 'First tab' }, root);
+  await saveBookmark({ id: 'second-tab', url: urls[1], title: 'Second tab' }, root);
+  await createProject({ id: 'demo', title: 'Demo' }, root);
+  await addProjectBookmark('demo', 'first-tab', root);
+  await addProjectBookmark('demo', 'second-tab', root);
+
+  const bin = path.join(root, 'bin');
+  const log = path.join(root, 'opened.txt');
+  await fs.mkdir(bin);
+  await fs.writeFile(path.join(bin, 'xdg-open'), '#!/bin/sh\nprintf "%s\\n" "$1" >> "$BOOKMARK_BROWSER_LOG"\n', { mode: 0o755 });
+  const environment = { ...process.env, BOOKMARK_VAULT: root, BOOKMARK_BROWSER_LOG: log, PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+  delete environment.BOOKMARK_RESULTS_HOST_VAULT;
+  const result = await run(process.execPath, [cli, 'project', 'open', 'demo'], { env: environment });
+  assert.match(result.stdout, /Opened 2 project tabs\./);
+  let opened = [];
+  for (let attempt = 0; attempt < 50; attempt++) {
+    opened = (await fs.readFile(log, 'utf8').catch(() => '')).trim().split('\n');
+    if (opened.length === urls.length) break;
+    await delay(20);
+  }
+  assert.deepEqual(opened.toSorted(), urls.toSorted());
+
+  // A missing system opener must report every URL for manual opening.
+  await fs.unlink(path.join(bin, 'xdg-open'));
+  await assert.rejects(() => run(process.execPath, [cli, 'project', 'open', 'demo'], {
+    env: { ...environment, PATH: bin }
+  }), (error) => {
+    assert.match(error.stderr, /Could not launch the default browser/);
+    for (const url of urls) assert.ok(error.stdout.includes(url));
+    return true;
+  });
 });

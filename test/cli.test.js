@@ -115,7 +115,8 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(openHelp.stdout, /Docker\/container cannot launch a host application/);
 
   const projectHelp = await run(process.execPath, [cli, 'project', '--help']);
-  assert.match(projectHelp.stdout, /present them as tabs in a new browser window/);
+  assert.match(projectHelp.stdout, /open their tabs in a browser/);
+  assert.match(projectHelp.stdout, /Open uses the system default browser when --with/);
   assert.match(projectHelp.stdout, /move PROJECT BOOKMARK --to NUMBER/);
   assert.match(projectHelp.stdout, /project open ai-assisted-app-talk --dry-run/);
 

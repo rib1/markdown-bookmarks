@@ -388,11 +388,14 @@ npm run bookmark -- project note add ai-assisted-app-talk d34db33f --note "Expla
 npm run bookmark -- project note remove ai-assisted-app-talk d34db33f --pick 1
 npm run bookmark -- project show ai-assisted-app-talk
 npm run bookmark -- project open ai-assisted-app-talk --dry-run
+npm run bookmark -- project open ai-assisted-app-talk
 npm run bookmark -- project open ai-assisted-app-talk --with chrome
 ```
 
-`project open` opens every safe HTTP/HTTPS URL as tabs in one new browser
-window; pass a browser with `--with` (for example `--with chrome`). It refuses
+`project open` opens every safe HTTP/HTTPS URL through your system default
+browser when `--with` is omitted. It submits URLs in project order; the default
+browser controls tab placement and whether it reuses an existing window. Pass
+`--with chrome` or `--with firefox` to request all tabs in one new window. It refuses
 to launch a partial presentation when a referenced bookmark is missing or has
 no safe URL. In Docker/container it prints the ordered URLs for opening on the host browser.
 Use `--note` with `project add`, or `project note add` later, for numbered

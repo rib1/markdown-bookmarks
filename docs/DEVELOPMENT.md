@@ -89,6 +89,12 @@ an ordered `notes` list of short presenter cues; preserve it when reordering
 entries. Schema v4 migrates earlier single `note` values to this list.
 Preserve unknown project metadata.
 
+`project open PROJECT` uses the platform default browser when `--with` is
+omitted, submitting each validated URL in project order. Window placement is
+controlled by the default browser. An explicit `--with` requests a new browser
+window. Tests must verify default launch commands on Windows/macOS/Linux and
+CLI behavior without launching a real browser.
+
 The browser extension may submit an optional `project_id` with a save. The
 local API validates the project before saving, then appends the saved bookmark
 ID to its ordered list. `GET /projects` exposes only project ID, title, and

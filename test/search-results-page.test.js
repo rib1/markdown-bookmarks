@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { browserCommand, browserWindowCommand, openInBrowser } from '../src/browser-launcher.js';
+import { browserCommand, browserWindowCommand, openInBrowser, openInBrowserWindow } from '../src/browser-launcher.js';
 import {
   cleanupStaleSearchResultPages,
   createSearchResultsPage,
@@ -139,7 +139,35 @@ test('builds a fresh browser window command with every project tab', () => {
   assert.deepEqual(browserWindowCommand(targets, 'win32', 'firefox'), {
     command: 'firefox.exe', args: ['-new-window', ...targets]
   });
-  assert.throws(() => browserWindowCommand(targets, 'win32'), /requires --with BROWSER/);
+  assert.throws(() => browserWindowCommand(targets, 'win32'), /explicit browser is required to force a new window/);
+});
+
+test('opens every project URL with the platform default browser when no browser is specified', async () => {
+  const targets = ['https://example.test/first?a=1&b=2', 'https://example.test/second'];
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    const calls = [];
+    await openInBrowserWindow(targets, undefined, platform, (command, args, options) => {
+      calls.push({ command, args });
+      assert.deepEqual(options, { detached: true, stdio: 'ignore' });
+      const child = new EventEmitter();
+      child.unref = () => {};
+      queueMicrotask(() => platform === 'darwin' ? child.emit('exit', 0) : child.emit('spawn'));
+      return child;
+    });
+    assert.deepEqual(calls, targets.map((target) => browserCommand(target, platform)));
+  }
+  assert.throws(() => openInBrowserWindow([]), /At least one browser target is required/);
+});
+
+test('default project browser launch failure stops opening later tabs', async () => {
+  const calls = [];
+  await assert.rejects(() => openInBrowserWindow(['https://example.test/first', 'https://example.test/second'], undefined, 'linux', (command, args) => {
+    calls.push({ command, args });
+    const child = new EventEmitter();
+    queueMicrotask(() => child.emit('error', Object.assign(new Error('Missing default browser opener'), { code: 'ENOENT' })));
+    return child;
+  }), /Missing default browser opener/);
+  assert.equal(calls.length, 1);
 });
 
 test('detects a macOS browser application that cannot be opened', async () => {

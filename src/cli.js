@@ -103,7 +103,7 @@ async function launchProjectBrowserOrExplain(entries, browser) {
     await openInBrowserWindow(entries.map((entry) => entry.url), browser);
     return true;
   } catch (error) {
-    const browserLabel = browser ? `browser "${browser}"` : 'the selected browser';
+    const browserLabel = browser ? `browser "${browser}"` : 'the default browser';
     const reason = error.code === 'ENOENT'
       ? 'the application or executable was not found'
       : 'the application could not be opened';
@@ -341,7 +341,7 @@ the host.`);
 function printProjectHelp() {
   console.log(`Usage: npm run bookmark -- project COMMAND [options]
 
-Create ordered bookmark projects and present them as tabs in a new browser window.
+Create ordered bookmark projects and open their tabs in a browser.
 
 Commands:
   create --title TITLE [--id ID] [--status STATUS] [--contexts LIST] [--tags LIST] [--purpose TEXT] [--notes TEXT]
@@ -356,8 +356,9 @@ Commands:
 
 PROJECT and BOOKMARK accept a full stable ID or a unique ID prefix. Project
 show also accepts a unique exact title. The project owns tab order; bookmarks
-may belong to many projects. Open requires --with BROWSER so it can force a new
-window. --dry-run prints the tab sequence without opening it.
+may belong to many projects. Open uses the system default browser when --with
+is omitted; the browser decides whether to reuse a window. --with BROWSER
+requests a new window. --dry-run prints the tab sequence without opening it.
 
 Examples:
   npm run bookmark -- project create --id ai-assisted-app-talk --title "AI-assisted application talk"
@@ -366,6 +367,7 @@ Examples:
   npm run bookmark -- project note remove ai-assisted-app-talk d34db33f --pick 2
   npm run bookmark -- project move ai-assisted-app-talk d34db33f --to 1
   npm run bookmark -- project show ai-assisted-app-talk
+  npm run bookmark -- project open ai-assisted-app-talk
   npm run bookmark -- project open ai-assisted-app-talk --with chrome
   npm run bookmark -- project open ai-assisted-app-talk --dry-run`);
 }
@@ -595,7 +597,6 @@ async function runTui() {
       if (process.env.BOOKMARK_RESULTS_HOST_VAULT && !request.dryRun) console.log('Open these project tabs on the host browser.');
       return;
     }
-    if (!request.withBrowser) throw new Error('project open requires --with BROWSER to open in a new browser window');
     const launched = await launchProjectBrowserOrExplain(result.entries, request.withBrowser);
     if (!launched) return;
     console.log(`Opened ${result.entries.length} project tab${result.entries.length === 1 ? '' : 's'}.`);

@@ -51,7 +51,7 @@ function windowArguments(browser, targets) {
 
 export function browserWindowCommand(targets, platform = process.platform, browser, options = {}) {
   if (!Array.isArray(targets) || !targets.length) throw new Error('At least one browser target is required');
-  if (!browser) throw new Error('project open requires --with BROWSER to open in a new browser window');
+  if (!browser) throw new Error('An explicit browser is required to force a new window');
   const application = browserApplication(browser, platform, options.environment || process.env, options.exists || fs.existsSync);
   const args = windowArguments(browser, targets);
   if (platform === 'darwin') return { command: 'open', args: ['-a', application, '--args', ...args] };
@@ -82,6 +82,12 @@ export function openInBrowser(target, browser, platform = process.platform, spaw
 }
 
 export function openInBrowserWindow(targets, browser, platform = process.platform, spawnProcess = spawn) {
+  if (!Array.isArray(targets) || !targets.length) throw new Error('At least one browser target is required');
+  if (!browser) {
+    return (async () => {
+      for (const target of targets) await openInBrowser(target, undefined, platform, spawnProcess);
+    })();
+  }
   const { command, args } = browserWindowCommand(targets, platform, browser);
   return new Promise((resolve, reject) => {
     const child = spawnProcess(command, args, { detached: true, stdio: 'ignore' });
