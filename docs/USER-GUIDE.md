@@ -1,6 +1,6 @@
 # User guide
 
-This guide describes the current prototype. The companion can run in Docker or
+This guide describes the current prototype. The companion can run in Docker/container or
 directly with Node.js and npm. A future release will provide a standalone
 executable that does not require Docker or a language runtime.
 
@@ -106,23 +106,23 @@ migrated-file count. Review and
 commit resulting private-vault changes with host Git; the companion never
 commits or pushes them.
 
-## Run the companion with WSLc
+## Run the companion with WSLc or `container`
 
 Windows 11 can run the companion image with WSLc, without Docker Desktop. WSLc
 is included with current WSL releases. Update WSL first, then use the WSLc
-command. Restart PowerShell after updating so the installer-added PATH entry is
-loaded:
+command. WSLc installs the portable `container` alias. Restart PowerShell after
+updating so the installer-added PATH entry is loaded:
 
 ```powershell
 wsl --update --web-download
 # Close and reopen PowerShell after the update.
-wslc --help
+container --help
 ```
 
 From the application repository, build the runtime image:
 
 ```powershell
-wslc build --tag markdown-bookmarks-wslc:local .
+container build --tag markdown-bookmarks-container:local .
 ```
 
 Set the private vault path and start the companion. The example uses a named
@@ -130,13 +130,15 @@ container and mounts the host vault at `/vault` inside the container:
 
 ```powershell
 $env:BOOKMARK_VAULT = 'C:\Users\YOUR-NAME\Documents\my-bookmarks'
-wslc run --detach --name markdown-bookmarks-wslc `
+container run --detach --name markdown-bookmarks `
   --publish 127.0.0.1:8787:8787 `
   --env VAULT_PATH=/vault `
   --env BOOKMARK_RESULTS_DIR=/vault/views/.search-results `
+  --env BOOKMARK_CONTAINER_TOOL=container `
+  --env BOOKMARK_CONTAINER_NAME=markdown-bookmarks `
   --env PORT=8787 `
   --volume "${env:BOOKMARK_VAULT}:/vault" `
-  markdown-bookmarks-wslc:local
+  markdown-bookmarks-container:local
 ```
 
 Check that it is running:
@@ -148,15 +150,15 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8787/capabilities
 Run CLI commands inside the companion container:
 
 ```powershell
-wslc exec markdown-bookmarks-wslc node src/cli.js vault status
-wslc exec markdown-bookmarks-wslc node src/cli.js find database
+container exec markdown-bookmarks node src/cli.js vault status
+container exec markdown-bookmarks node src/cli.js find database
 ```
 
 Stop and remove the container when finished:
 
 ```powershell
-wslc stop markdown-bookmarks-wslc
-wslc remove markdown-bookmarks-wslc
+container stop markdown-bookmarks
+container remove markdown-bookmarks
 ```
 
 WSLc does not provide `compose` support yet, so the browser end-to-end suite
@@ -301,7 +303,7 @@ npm run bookmark -- project open ai-assisted-app-talk --with chrome
 `project open` opens every safe HTTP/HTTPS URL as tabs in one new browser
 window; pass a browser with `--with` (for example `--with chrome`). It refuses
 to launch a partial presentation when a referenced bookmark is missing or has
-no safe URL. In Docker it prints the ordered URLs for opening on the host browser.
+no safe URL. In Docker/container it prints the ordered URLs for opening on the host browser.
 Use `--note` with `project add`, or `project note add` later, for numbered
 presenter cues shown by `project show`. Add as many as needed; `project note
 remove --pick NUMBER` deletes only that cue. Notes stay attached when tabs are
@@ -338,7 +340,7 @@ npm run bookmark -- open --help
 
 The detailed help explains `--pick`, `--with`, `--dry-run`, supported browser
 aliases, custom application/executable values, platform behavior, and the fact
-that Docker cannot launch applications on the host.
+that Docker/container cannot launch applications on the host.
 
 Every command supports `--help` and `-h`, and help takes precedence over other
 arguments:
@@ -479,7 +481,7 @@ Docker, keep `bookmarkd` running and run:
 docker compose exec bookmarkd node src/cli.js find database --browser
 ```
 
-Docker prints the generated file's host-side `file://` link for the browser.
+Docker/container prints the generated file's host-side `file://` link for the browser.
 Set `BOOKMARK_VAULT` to an absolute host path before starting Compose so that
 this link can be constructed reliably. Both modes store the generated HTML
 under the private vault's Git-ignored `views/.search-results/` directory. The
@@ -505,7 +507,7 @@ npm run bookmark -- open database --with firefox
 
 You can also give a macOS application name or a Windows/Linux executable name
 or path. Browser launching is available only in the native npm workflow;
-Docker cannot launch applications on the host.
+Docker/container cannot launch applications on the host.
 
 If the selected browser is missing or cannot start, the CLI prints a clear
 message and the target URL for manual opening, without a stack trace. The
@@ -562,7 +564,7 @@ npm run bookmark -- vault status
 
 With the Docker companion running, use
 `docker compose exec bookmarkd node src/cli.js vault status` instead.
-Docker output labels both the host vault path and its `/vault` container mount;
+Docker/container output labels both the host vault path and its `/vault` container mount;
 native output shows only the native vault path.
 
 The command does not run Git or access the network. When local Git metadata is
@@ -591,7 +593,7 @@ docker compose exec bookmarkd node src/cli.js vault git-help
 docker compose exec bookmarkd node src/cli.js vault git-help --full
 ```
 
-Docker help labels both paths, but its copyable Git commands use the host vault
+Docker/container help labels both paths, but its copyable Git commands use the host vault
 path rather than the container-only `/vault` mount.
 
 The help command does not run Git or access the network. Its full form explains
@@ -610,7 +612,7 @@ npm run bookmark -- vault open
 ```
 
 Use `--dry-run` to print the native command without opening anything. In
-Docker, the command prints a host-side command because a container cannot open
+Docker/container, the command prints a host-side command because a container cannot open
 the host file manager. An uninitialized vault is not opened; the TUI prints the
 initialization command instead.
 

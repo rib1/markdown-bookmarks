@@ -12,6 +12,8 @@ services:
       VAULT_PATH: /vault
       BOOKMARK_RESULTS_DIR: /vault/views/.search-results
       BOOKMARK_RESULTS_HOST_VAULT: ${BOOKMARK_VAULT:-${PWD}/vault}
+      BOOKMARK_CONTAINER_TOOL: docker
+      BOOKMARK_CONTAINER_NAME: bookmarkd
       PORT: 8787
     volumes:
       - ${BOOKMARK_VAULT:-./vault}:/vault

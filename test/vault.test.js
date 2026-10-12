@@ -18,7 +18,7 @@ function metadataList(content, field) {
   return [...match[1].matchAll(/^ {2}- (.+)$/gm)].map((item) => JSON.parse(item[1]));
 }
 
-test('uses the Docker VAULT_PATH when BOOKMARK_VAULT is not set', { concurrency: false }, () => {
+test('uses the container VAULT_PATH when BOOKMARK_VAULT is not set', { concurrency: false }, () => {
   const previousBookmarkVault = process.env.BOOKMARK_VAULT;
   const previousVaultPath = process.env.VAULT_PATH;
   delete process.env.BOOKMARK_VAULT;

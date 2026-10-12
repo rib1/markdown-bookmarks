@@ -219,9 +219,12 @@ All npm examples must include the argument separator:
 as `--browser` or `--fuzzy` instead of forwarding them.
 
 Vault-specific help must adapt to its execution environment. Native output uses
-`npm run bookmark --`; Docker output uses `docker compose exec bookmarkd node
-src/cli.js`, labels host and container vault paths, and prints host Git commands
-against the host path rather than `/vault`.
+`npm run bookmark --`; Docker Compose output uses `docker compose exec bookmarkd
+node src/cli.js`. With `BOOKMARK_CONTAINER_TOOL=container`, output uses
+`container exec NAME node src/cli.js`, where `BOOKMARK_CONTAINER_NAME` selects
+NAME (default: `bookmarkd`). When `BOOKMARK_RESULTS_HOST_VAULT` is supplied,
+help labels host and container vault paths and prints host Git commands against
+the host path rather than `/vault`.
 
 The `find` query may be omitted when `--saved-within` or `--saved-since`
 narrows the results. Bare `find` remains invalid to avoid accidentally printing
@@ -237,7 +240,7 @@ needs the diagnostic stack.
 `vault git-help` only renders commands for the selected vault. It must not run
 Git, inspect credentials or remotes, or access the network. `--full` adds less
 common initialization, synchronization, and conflict guidance.
-`vault open` launches the native file explorer; in Docker it prints host-side
+`vault open` launches the native file explorer; in Docker/container it prints host-side
 commands instead. `--dry-run` never launches an application.
 When the schema manifest is absent, vault help and Git help lead with
 `vault init`; `vault open` fails with the same actionable instruction.
@@ -267,7 +270,7 @@ prints the vault file path and full Markdown content.
 With `--browser`, it
 creates a static, safely escaped HTML page in the vault's ignored
 `views/.search-results/` directory. Native mode prints its `file://` URL before
-opening it; Docker prints the corresponding host-side `file://` URL.
+opening it; Docker/container prints the corresponding host-side `file://` URL.
 Server startup removes generated pages older than 24 hours. `--dry-run` prints
 the page URL without launching it.
 
@@ -291,7 +294,7 @@ uses the displayed result numbering. `--with BROWSER` selects a known
 browser alias or an explicit application/executable in native mode. Its
 `--dry-run` prints the resolved bookmark URL without launching a browser.
 `open --help` documents every launch option and gives linked search/open
-workflow examples. Docker cannot launch host applications, so it prints the
+workflow examples. Docker/container cannot launch host applications, so it prints the
 selected URL instead. Native launch failures print the target for manual
 opening without a stack trace and return a nonzero status.
 

@@ -8,7 +8,7 @@ import { chromium, expect } from '@playwright/test';
 import { saveBookmark } from './src/vault.js';
 
 const exec = promisify(execFile);
-// The vault is a Docker volume so the test can inspect files written by the service.
+// The vault is a mounted directory so the test can inspect files written by the service.
 const vault = process.env.VAULT_PATH || '/vault';
 const extensionPath = path.resolve('/e2e/extension');
 console.log('launching Chrome');

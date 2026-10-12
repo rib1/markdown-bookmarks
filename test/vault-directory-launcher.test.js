@@ -16,7 +16,7 @@ test('selects native file-explorer commands without launching them', () => {
     'open "/Users/example/My Vault"');
 });
 
-test('prints suitable host commands when running in Docker', () => {
+test('prints suitable host commands when running in Docker/container', () => {
   assert.deepEqual(hostDirectoryCommands('C:\\Users\\example\\Vault'),
     ['explorer.exe "C:\\Users\\example\\Vault"']);
   assert.deepEqual(hostDirectoryCommands('/Users/example/Vault'), [

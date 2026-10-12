@@ -31,9 +31,11 @@ import { parseProjectArguments } from './tui-project-arguments.js';
 const [command, ...args] = process.argv.slice(2);
 
 function tuiCommandPrefix() {
-  return process.env.BOOKMARK_RESULTS_HOST_VAULT
-    ? 'docker compose exec bookmarkd node src/cli.js'
-    : 'npm run bookmark --';
+  if (!process.env.BOOKMARK_RESULTS_HOST_VAULT) return 'npm run bookmark --';
+  const tool = (process.env.BOOKMARK_CONTAINER_TOOL || 'docker').trim().toLowerCase();
+  const container = process.env.BOOKMARK_CONTAINER_NAME || 'bookmarkd';
+  if (tool === 'container') return `container exec ${container} node src/cli.js`;
+  return 'docker compose exec bookmarkd node src/cli.js';
 }
 
 function tuiCommand(arguments_) {
@@ -140,7 +142,7 @@ function printVaultHelp(root, initialized = true) {
 
 No Git command is run and no network connection is made by status or git-help.
 Status can compare local HEAD with the last fetched upstream checkpoint. Vault
-open uses the native file explorer; Docker prints a host command instead.
+open uses the native file explorer; Docker/container prints a host command instead.
 
 Options:
   --path PATH       Select a path for init or skill-install.
@@ -330,8 +332,9 @@ Open all search matches as a browser page:
 
 On macOS, custom values are passed to "open -a" as application names. On
 Windows and Linux, custom values are launched directly and must be executable
-paths or commands available on PATH. Docker cannot launch a host application,
-so the Docker command prints the selected URL for opening on the host.`);
+paths or commands available on PATH. Docker/container cannot launch a host application,
+so the command prints the selected URL for opening on
+the host.`);
 }
 
 function printProjectHelp() {

@@ -112,7 +112,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
     /find database --saved-since 2026-09-01\n\s+npm run bookmark -- open database --saved-since 2026-09-01 --pick 3/);
   assert.match(openHelp.stdout, /find database --browser --with firefox/);
   assert.match(openHelp.stdout, /open triper --fuzzy/);
-  assert.match(openHelp.stdout, /Docker cannot launch a host application/);
+  assert.match(openHelp.stdout, /Docker\/container cannot launch a host application/);
 
   const projectHelp = await run(process.execPath, [cli, 'project', '--help']);
   assert.match(projectHelp.stdout, /present them as tabs in a new browser window/);
@@ -314,6 +314,18 @@ test('vault commands render Git help and safe file-explorer commands', async () 
   const dockerOpen = await run(process.execPath, [cli, 'vault', 'open'], { env: dockerEnv });
   assert.match(dockerOpen.stdout, /Open the vault on the host:/);
   assert.match(dockerOpen.stdout, /explorer\.exe "C:\\Users\\example\\Bookmark Vault"/);
+
+  const containerEnv = {
+    ...dockerEnv,
+    BOOKMARK_CONTAINER_TOOL: 'container',
+    BOOKMARK_CONTAINER_NAME: 'markdown-bookmarks'
+  };
+  const containerHelp = await run(process.execPath, [cli, 'vault', '--help'], { env: containerEnv });
+  assert.match(containerHelp.stdout,
+    /Usage: container exec markdown-bookmarks node src\/cli\.js vault init \[--path PATH\]/);
+  const containerGitHelp = await run(process.execPath, [cli, 'vault', 'git-help'], { env: containerEnv });
+  assert.match(containerGitHelp.stdout,
+    /More help: container exec markdown-bookmarks node src\/cli\.js vault git-help --full/);
 });
 
 test('empty interactive link selection cancels without choosing a bookmark', () => {

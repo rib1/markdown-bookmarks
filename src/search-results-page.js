@@ -146,5 +146,5 @@ export function hostSearchResultsFileUrl(token, hostVaultPath) {
     return `file:///${drive}/${[...parts, ...relativeParts].map(encodeURIComponent).join('/')}`;
   }
   if (path.isAbsolute(hostVaultPath)) return pathToFileURL(path.join(hostVaultPath, ...relativeParts)).href;
-  throw new Error('BOOKMARK_VAULT must be an absolute host path for Docker browser results');
+  throw new Error('BOOKMARK_VAULT must be an absolute host path for Docker/container browser results');
 }
