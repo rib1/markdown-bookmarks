@@ -21,6 +21,7 @@ test('parses project commands and rejects incompatible options', () => {
     action: 'note', noteAction: 'remove', project: 'talk', bookmark: 'bookmark'
   });
   assert.throws(() => parseProjectArguments(['note', 'add', 'talk', 'bookmark']), /--note TEXT/);
+  assert.throws(() => parseProjectArguments(['note', 'remove', 'talk', 'bookmark', '--pick', '1', '--note', 'Ignored']), /--note is only supported by project add and project note add/);
   assert.throws(() => parseProjectArguments(['list', '--dry-run']), /only supported by project open/);
   assert.throws(() => parseProjectArguments(['show', 'talk', 'extra']), /Unexpected extra argument/);
 });

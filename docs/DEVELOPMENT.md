@@ -218,6 +218,41 @@ All npm examples must include the argument separator:
 `npm run bookmark -- COMMAND`. Without `--`, npm may consume CLI options such
 as `--browser` or `--fuzzy` instead of forwarding them.
 
+`scripts/bookmark.ps1` provides the PowerShell `bookmark` function and loads
+`scripts/bookmark-completion.ps1`. Static completion must work offline without
+launching a runtime, reading a vault, or evaluating shell input. Keep its
+command and option lists aligned with the TUI parsers. The `powershell-tests`
+Compose service exercises argument forwarding and real `TabExpansion2`
+completion, including quoted input, cursor position, and conflicting options.
+
+The PowerShell test image generates a completion contract directly from the
+JavaScript parsers and their exported option/command definitions. Its consistency
+test compares PowerShell command scopes, option types, browser aliases, time
+periods, and actual `TabExpansion2` results with that contract. Added or removed
+JavaScript options must fail this test when the completion script is stale.
+New project subcommands also require a valid parser fixture in
+`test/completion-contract.js`. Contract generation and comparison run only in
+Docker; host completion remains static and offline.
+
+The same `powershell-tests` image installs pinned PSScriptAnalyzer 1.25.0 and
+runs `test/powershell-lint.ps1` before the tests. Lint covers `scripts/`,
+PowerShell tests, and `PSScriptAnalyzerSettings.psd1`; warnings and errors fail
+the run. Test helpers alone exclude approved-verb and global-variable rules
+because they mock native runtime commands and share assertion state. The
+linter is installed only in Docker. Run lint alone with:
+
+```powershell
+docker compose run --rm --build powershell-tests pwsh -NoLogo -NoProfile -File test/powershell-lint.ps1
+```
+
+The wrapper prefers an existing host npm installation for browser launching,
+using `--prefix` to target this application repository from any directory.
+It must preserve `BOOKMARK_VAULT`, argument boundaries, output, and exit codes.
+`BOOKMARK_PREFER_NPM=0` forces the configured runtime; an explicitly selected
+native standalone executable also takes priority over npm. Container execution
+remains the fallback when npm is unavailable. Never install host dependencies
+automatically.
+
 Vault-specific help must adapt to its execution environment. Native output uses
 `npm run bookmark --`; Docker Compose output uses `docker compose exec bookmarkd
 node src/cli.js`. With `BOOKMARK_CONTAINER_TOOL=container`, output uses

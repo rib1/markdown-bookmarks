@@ -7,6 +7,20 @@ Set-Item -Path Function:global:bookmark -Value {
     if ([string]::IsNullOrWhiteSpace($tool)) { $tool = 'docker' }
     $tool = $tool.Trim().ToLowerInvariant()
 
+    if ($tool -notin 'docker', 'container', 'wslc', 'native') {
+        throw "Unknown BOOKMARK_CONTAINER_TOOL: $tool. Use docker, container, wslc, or native."
+    }
+    # Prefer the host CLI for browser launches; use existing npm without installing anything.
+    # npm.cmd avoids Windows execution-policy restrictions on the npm.ps1 shim.
+    $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if (-not $npmCommand) { $npmCommand = Get-Command npm -ErrorAction SilentlyContinue }
+    if ($npmCommand -and $env:BOOKMARK_PREFER_NPM -ne '0' -and
+        -not ($tool -eq 'native' -and $env:BOOKMARK_EXECUTABLE)) {
+        & $npmCommand --prefix $bookmarkRepository run bookmark '--' @bookmarkArguments
+        $global:LASTEXITCODE = $LASTEXITCODE
+        return
+    }
+
     switch ($tool) {
         'docker' {
             $service = $env:BOOKMARK_CONTAINER_NAME
@@ -25,9 +39,8 @@ Set-Item -Path Function:global:bookmark -Value {
                 & node (Join-Path $bookmarkRepository 'src/cli.js') @bookmarkArguments
             }
         }
-        default {
-            throw "Unknown BOOKMARK_CONTAINER_TOOL: $tool. Use docker, container, wslc, or native."
-        }
     }
     $global:LASTEXITCODE = $LASTEXITCODE
 }.GetNewClosure()
+
+. (Join-Path $PSScriptRoot 'bookmark-completion.ps1')

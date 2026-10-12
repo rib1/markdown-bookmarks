@@ -1,6 +1,8 @@
 import { argumentError, parseTuiArguments } from './tui-arguments.js';
 
-const vaultOptions = {
+export const VAULT_COMMANDS = Object.freeze(['init', 'skill-install', 'status', 'git-help', 'open', 'tag-lint', 'tag-fix']);
+
+export const vaultOptions = {
   '--full': { key: 'full', type: 'boolean' },
   '--dry-run': { key: 'dryRun', type: 'boolean' },
   '--path': { key: 'path', type: 'value', valueLabel: 'a vault path' },
@@ -14,7 +16,7 @@ export function parseVaultArguments(args) {
   const parsed = parseTuiArguments(args, { options: vaultOptions, maximumPositionals: 1 });
   if (parsed.help) return parsed;
   const [action] = parsed.positionals;
-  if (!['init', 'skill-install', 'status', 'git-help', 'open', 'tag-lint', 'tag-fix'].includes(action)) {
+  if (!VAULT_COMMANDS.includes(action)) {
     throw argumentError('invalid_subcommand', 'Usage: npm run bookmark -- vault COMMAND [options]. Run vault --help.');
   }
   if (!['git-help', 'tag-lint'].includes(action) && parsed.full) {

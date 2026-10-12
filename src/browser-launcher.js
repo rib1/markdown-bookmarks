@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
-const BROWSER_ALIASES = {
+export const BROWSER_ALIASES = {
   chrome: { win32: 'chrome.exe', darwin: 'Google Chrome', linux: 'google-chrome' },
   edge: { win32: 'msedge.exe', darwin: 'Microsoft Edge', linux: 'microsoft-edge' },
   firefox: { win32: 'firefox.exe', darwin: 'Firefox', linux: 'firefox' },

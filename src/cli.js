@@ -27,6 +27,7 @@ import {
   projectBookmarks, removeProjectBookmark, addProjectBookmarkNote, removeProjectBookmarkNote
 } from './projects.js';
 import { parseProjectArguments } from './tui-project-arguments.js';
+import { TUI_COMMANDS } from './tui-arguments.js';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -490,6 +491,7 @@ async function runTui() {
   if (command === 'skill') {
     throw new Error('The skill command moved: npm run bookmark -- vault skill-install [--path PATH]');
   }
+  if (!TUI_COMMANDS.includes(command)) throw new Error(`Unknown command: ${command}. Run npm run bookmark -- help.`);
   if (command === 'vault') {
     const options = parseVaultArguments(args);
     const root = options.path || vaultRoot();

@@ -1,6 +1,9 @@
 import { argumentError, parseTuiArguments } from './tui-arguments.js';
 
-const options = {
+export const PROJECT_COMMANDS = Object.freeze(['create', 'list', 'show', 'add', 'remove', 'move', 'note', 'open']);
+export const PROJECT_NOTE_COMMANDS = Object.freeze(['add', 'remove']);
+
+export const options = {
   '--title': { key: 'title', type: 'value', valueLabel: 'a project title' },
   '--id': { key: 'id', type: 'value', valueLabel: 'a stable project ID' },
   '--status': { key: 'status', type: 'value', valueLabel: 'a status' },
@@ -19,7 +22,7 @@ export function parseProjectArguments(args) {
   const parsed = parseTuiArguments(args, { options, maximumPositionals: 4 });
   if (parsed.help) return parsed;
   const [action, first, second, third] = parsed.positionals;
-  if (!['create', 'list', 'show', 'add', 'remove', 'move', 'note', 'open'].includes(action)) {
+  if (!PROJECT_COMMANDS.includes(action)) {
     throw argumentError('invalid_subcommand', 'Usage: npm run bookmark -- project COMMAND [options]. Run project --help.');
   }
   if ((action === 'list' || action === 'create') && first) {
@@ -28,7 +31,7 @@ export function parseProjectArguments(args) {
   if (['show', 'open'].includes(action) && second) {
     throw argumentError('extra_positional', `Unexpected extra argument: ${JSON.stringify(second)}`);
   }
-  const noteAction = action === 'note' && ['add', 'remove'].includes(first) ? first : undefined;
+  const noteAction = action === 'note' && PROJECT_NOTE_COMMANDS.includes(first) ? first : undefined;
   if (action === 'note' && !noteAction && third) {
     throw argumentError('extra_positional', `Unexpected extra argument: ${JSON.stringify(third)}`);
   }
@@ -45,7 +48,9 @@ export function parseProjectArguments(args) {
   if (action === 'note' && noteAction === 'add' && parsed.note === undefined) throw argumentError('missing_option', 'Usage: npm run bookmark -- project note add PROJECT BOOKMARK --note TEXT');
   if (action === 'note' && noteAction === 'remove' && parsed.pick === undefined) throw argumentError('missing_option', 'Usage: npm run bookmark -- project note remove PROJECT BOOKMARK --pick NUMBER');
   if (action !== 'move' && parsed.to) throw argumentError('unsupported_option', '--to is only supported by project move');
-  if (!['add', 'note'].includes(action) && parsed.note !== undefined) throw argumentError('unsupported_option', '--note is only supported by project add and project note');
+  if ((!['add', 'note'].includes(action) || noteAction === 'remove') && parsed.note !== undefined) {
+    throw argumentError('unsupported_option', '--note is only supported by project add and project note add');
+  }
   if (!(action === 'note' && noteAction === 'remove') && parsed.pick !== undefined) throw argumentError('unsupported_option', '--pick is only supported by project note remove');
   if (action !== 'open' && (parsed.withBrowser || parsed.dryRun)) throw argumentError('unsupported_option', '--with and --dry-run are only supported by project open');
   if (action !== 'create' && (parsed.title || parsed.id || parsed.status || parsed.contexts || parsed.tags || parsed.purpose || parsed.notes)) {

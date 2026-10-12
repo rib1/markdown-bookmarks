@@ -2,7 +2,7 @@ import { prepareFindRequest } from './find-query.js';
 import { searchMode } from './search-mode.js';
 import { argumentError, parseTuiArguments } from './tui-arguments.js';
 
-const options = {
+export const options = {
   '--saved-within': { key: 'savedWithin', type: 'value', valueLabel: 'day, week, month, or year' },
   '--saved-since': { key: 'savedSince', type: 'value', valueLabel: 'YYYY-MM-DD' },
   '--fuzzy': { key: 'fuzzy', type: 'boolean' },

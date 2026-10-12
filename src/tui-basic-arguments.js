@@ -1,6 +1,6 @@
 import { argumentError, parseTuiArguments } from './tui-arguments.js';
 
-const saveOptions = {
+export const saveOptions = {
   '--url': { key: 'url', type: 'value', valueLabel: 'a URL' },
   '--title': { key: 'title', type: 'value', valueLabel: 'a title' },
   '--tags': { key: 'tags', type: 'value', valueLabel: 'a comma-separated tag list' },

@@ -3,7 +3,7 @@ import { argumentError, parseTuiArguments } from './tui-arguments.js';
 
 export const OPEN_USAGE = 'Usage: npm run bookmark -- open QUERY [options]';
 
-const options = {
+export const options = {
   '--pick': { key: 'pick', type: 'value', valueLabel: 'a positive result number' },
   '--saved-within': { key: 'savedWithin', type: 'value', valueLabel: 'day, week, month, or year' },
   '--saved-since': { key: 'savedSince', type: 'value', valueLabel: 'YYYY-MM-DD' },

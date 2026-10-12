@@ -200,8 +200,16 @@ From the application repository, load the wrapper into your current session:
 . ./scripts/bookmark.ps1
 ```
 
-Select the runtime used by your running companion. Docker Compose is the
-default and uses the `bookmarkd` service. For Windows WSLc or macOS `container`:
+When npm is available on the host, `bookmark` automatically uses
+`npm --prefix APPLICATION-PATH run bookmark -- ...`. Browser-opening commands
+then run on the host and can open your browser directly. This uses your existing
+Node/npm installation and does not install packages. Set `BOOKMARK_VAULT` to
+your private vault in the host shell so the local CLI uses the same vault as the
+companion.
+
+When npm is unavailable, the wrapper uses the configured runtime. Docker
+Compose is the default and uses the `bookmarkd` service. For Windows WSLc or
+macOS `container`:
 
 ```powershell
 $env:BOOKMARK_CONTAINER_TOOL = 'container'
@@ -215,11 +223,17 @@ Use `BOOKMARK_CONTAINER_TOOL=docker` for Docker Compose, `wslc` to use that
 command explicitly, or `native` for the Node prototype. Native mode calls
 `node` with the repository's CLI path; when a standalone executable is
 available, set `BOOKMARK_EXECUTABLE` to its path instead. Set `BOOKMARK_VAULT`
-in the host shell for native mode. Containers use their existing mounted vault.
+in the host shell for host execution. Containers use their existing mounted vault.
+An explicitly configured native `BOOKMARK_EXECUTABLE` takes priority over npm.
+To force the configured runtime even when npm is installed, set
+`$env:BOOKMARK_PREFER_NPM = '0'`. Remove that setting to restore automatic npm
+preference.
 
 The wrapper works from any directory, forwards arguments and output, and
-preserves the runtime exit code in `$LASTEXITCODE`. It uses an already running
-companion container. It does not start the service.
+preserves the runtime exit code in `$LASTEXITCODE`. When using a container it
+requires that container to be running. It does not start the service. Host CLI
+commands can run without the companion service; browser-extension saves still
+need the service.
 
 When passing the CLI's end-of-options separator through a PowerShell function,
 quote it so PowerShell forwards it as an argument:
@@ -238,15 +252,36 @@ $env:BOOKMARK_CONTAINER_NAME = 'markdown-bookmarks'
 . 'C:\path\to\markdown_bookmarks\scripts\bookmark.ps1'
 ```
 
-On macOS PowerShell, use the corresponding absolute macOS path. The wrapper
-provides the short command only; tab completion will be added separately.
+On macOS PowerShell, use the corresponding absolute macOS path. Loading the
+wrapper also enables tab completion. Reload it with `. ./scripts/bookmark.ps1`
+or reload your configured profile with `. $PROFILE` to pick up updates.
 
-Run the wrapper's argument-forwarding tests without installing any development
+Press Tab to complete commands, subcommands, options, browser aliases, and
+save-time periods, for example:
+
+```text
+bookmark va<Tab>                     -> vault
+bookmark vault sta<Tab>              -> status
+bookmark find amiga --saved-w<Tab>   -> --saved-within
+bookmark find --saved-within w<Tab>  -> week
+bookmark open amiga --with f<Tab>    -> firefox
+```
+
+Completion runs entirely in PowerShell, even when the companion is stopped.
+It avoids already used and conflicting options. Tags, bookmark IDs, project
+IDs, and other vault values are not suggested yet.
+
+Run the wrapper's argument-forwarding and completion tests without installing any development
 dependencies on the host:
 
 ```powershell
 docker compose run --rm --build powershell-tests
 ```
+
+This also verifies that PowerShell completion matches the current JavaScript
+command definitions and parser behavior, catching stale command and option lists.
+PSScriptAnalyzer checks the PowerShell scripts before tests run. The linter is
+installed inside Docker; no additional host installation is needed.
 
 ## Install the extension
 

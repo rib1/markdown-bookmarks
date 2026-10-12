@@ -49,6 +49,33 @@ $output = bookmark -c 'printf "%s\n" "$@"; exit 17' fixture 'with spaces' 'liter
 Assert-Equal $output @('with spaces', 'literal "$(not code)"', '', '--') 'Native process argument boundaries'
 Assert-Equal $LASTEXITCODE 17 'Native process exit code'
 
+# With npm available, prefer host execution even if a container is configured.
+function global:npm { $global:invocation = @('npm') + $args; $global:LASTEXITCODE = 19; 'npm output' }
+$env:BOOKMARK_CONTAINER_TOOL = 'docker'
+$env:BOOKMARK_EXECUTABLE = ''
+$env:BOOKMARK_PREFER_NPM = ''
+$env:BOOKMARK_VAULT = '/tmp/Private Vault'
+$output = bookmark open 'amiga music' --with firefox --dry-run
+Assert-Equal $global:invocation @('npm', '--prefix', $repository, 'run', 'bookmark', '--', 'open', 'amiga music', '--with', 'firefox', '--dry-run') 'npm host preference and forwarding'
+Assert-Equal $output 'npm output' 'npm output forwarding'
+Assert-Equal $LASTEXITCODE 19 'npm exit code forwarding'
+Assert-Equal $env:BOOKMARK_VAULT '/tmp/Private Vault' 'Host vault retained'
+Assert-Equal (Get-Location).Path '/tmp' 'npm preserves caller directory'
+$env:BOOKMARK_CONTAINER_TOOL = 'container'
+bookmark find amiga --browser | Out-Null
+Assert-Equal $global:invocation @('npm', '--prefix', $repository, 'run', 'bookmark', '--', 'find', 'amiga', '--browser') 'npm preference with container fallback configured'
+
+# Users can explicitly keep execution inside their configured container.
+$env:BOOKMARK_PREFER_NPM = '0'
+bookmark find amiga | Out-Null
+Assert-Equal $global:invocation @('container', 'exec', 'custom-name', 'node', 'src/cli.js', 'find', 'amiga') 'npm preference opt-out'
+$env:BOOKMARK_PREFER_NPM = ''
+$env:BOOKMARK_CONTAINER_TOOL = 'native'
+$env:BOOKMARK_EXECUTABLE = 'testCompanion'
+bookmark help | Out-Null
+Assert-Equal $global:invocation @('testCompanion', 'help') 'Explicit standalone executable takes priority'
+Remove-Item Function:global:npm
+
 $env:BOOKMARK_CONTAINER_TOOL = 'unknown'
 $rejected = $false
 try { bookmark help } catch { $rejected = $_.Exception.Message -like 'Unknown BOOKMARK_CONTAINER_TOOL:*' }

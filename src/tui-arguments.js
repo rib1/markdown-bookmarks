@@ -1,3 +1,5 @@
+export const TUI_COMMANDS = Object.freeze(['find', 'open', 'save', 'vault', 'project', 'help']);
+
 export class TuiArgumentError extends Error {
   constructor(code, message) {
     super(message);
