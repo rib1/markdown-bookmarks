@@ -1,4 +1,9 @@
 services:
+  powershell-tests:
+    build:
+      context: .
+      dockerfile: test/powershell.Dockerfile
+
   quality:
     build:
       context: .

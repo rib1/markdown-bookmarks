@@ -192,6 +192,62 @@ run the current prototype, not the future self-contained companion binary.
 The same automatic schema migration described above runs before the npm server
 starts listening.
 
+## Use the `bookmark` PowerShell wrapper
+
+From the application repository, load the wrapper into your current session:
+
+```powershell
+. ./scripts/bookmark.ps1
+```
+
+Select the runtime used by your running companion. Docker Compose is the
+default and uses the `bookmarkd` service. For Windows WSLc or macOS `container`:
+
+```powershell
+$env:BOOKMARK_CONTAINER_TOOL = 'container'
+$env:BOOKMARK_CONTAINER_NAME = 'markdown-bookmarks'
+bookmark find 'amiga music' --saved-within week
+bookmark vault status
+bookmark open database --pick 2
+```
+
+Use `BOOKMARK_CONTAINER_TOOL=docker` for Docker Compose, `wslc` to use that
+command explicitly, or `native` for the Node prototype. Native mode calls
+`node` with the repository's CLI path; when a standalone executable is
+available, set `BOOKMARK_EXECUTABLE` to its path instead. Set `BOOKMARK_VAULT`
+in the host shell for native mode. Containers use their existing mounted vault.
+
+The wrapper works from any directory, forwards arguments and output, and
+preserves the runtime exit code in `$LASTEXITCODE`. It uses an already running
+companion container. It does not start the service.
+
+When passing the CLI's end-of-options separator through a PowerShell function,
+quote it so PowerShell forwards it as an argument:
+
+```powershell
+bookmark find '--' -amiga
+```
+
+To enable `bookmark` in new sessions, add your runtime settings and a
+dot-source line using the absolute application path to your PowerShell
+`$PROFILE`, for example:
+
+```powershell
+$env:BOOKMARK_CONTAINER_TOOL = 'container'
+$env:BOOKMARK_CONTAINER_NAME = 'markdown-bookmarks'
+. 'C:\path\to\markdown_bookmarks\scripts\bookmark.ps1'
+```
+
+On macOS PowerShell, use the corresponding absolute macOS path. The wrapper
+provides the short command only; tab completion will be added separately.
+
+Run the wrapper's argument-forwarding tests without installing any development
+dependencies on the host:
+
+```powershell
+docker compose run --rm --build powershell-tests
+```
+
 ## Install the extension
 
 1. Open `chrome://extensions` in Chrome.

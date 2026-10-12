@@ -39,6 +39,7 @@ Load `extension/` as an unpacked Chrome extension.
 ```powershell
 docker compose run --rm quality
 docker compose run --rm all-tests
+docker compose run --rm --build powershell-tests
 ```
 
 See the [user guide](docs/USER-GUIDE.md), [development instructions](docs/DEVELOPMENT.md),

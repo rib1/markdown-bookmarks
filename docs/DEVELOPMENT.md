@@ -344,6 +344,7 @@ application repository with:
 ```powershell
 docker compose run --rm quality
 docker compose run --rm all-tests
+docker compose run --rm --build powershell-tests
 ```
 
 GitHub Dependabot checks npm, Docker, and GitHub Actions dependencies weekly.

@@ -23,3 +23,6 @@ jobs:
 
       - name: Run tests
         run: docker compose run --rm all-tests
+
+      - name: Test PowerShell wrapper
+        run: docker compose run --rm --build powershell-tests
