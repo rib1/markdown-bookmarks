@@ -56,7 +56,7 @@ access_count: 1
 ## Summary
 
 `, 'utf8');
-  await createProject({ id: 'server-project', title: 'Server project' }, bookmarkVault);
+  const serverProject = await createProject({ id: 'server-project', title: 'Server project', tags: ['reference'] }, bookmarkVault);
   const server = spawn(process.execPath, ['src/server.js'], {
     cwd: path.resolve('.'),
     env: {
@@ -142,6 +142,10 @@ access_count: 1
   assert.equal(partiallySaved.length, 1);
   assert.doesNotMatch(partiallySaved[0].content, /lost_field|must warn/);
 
+  const initialProject = await fs.readFile(serverProject.file, 'utf8');
+  const originalTags = initialProject.match(/^tags:\n(?: {2}[^\n]*\n)*/m)[0];
+  const reorderedProject = initialProject.replace(originalTags, '').replace('\n---\n', `\n${originalTags}---\n`);
+  await fs.writeFile(serverProject.file, reorderedProject.replace(/\n/g, '\r\n'));
   const response = await fetch(`http://127.0.0.1:${port}/bookmarks`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -180,5 +184,27 @@ access_count: 1
   assert.match(savedContent, /"browser":"Google Chrome"/);
   assert.match(savedContent, /"browser_version":"140"/);
   assert.deepEqual((await projectBookmarks('server-project', bookmarkVault)).entries.map((entry) => entry.id), [savedResponse.result.id]);
+  const repeated = await fetch(`http://127.0.0.1:${port}/bookmarks`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(browserRequest({ url: 'https://example.test/native-server', tags: ['another'], project_id: 'server-project' }))
+  });
+  assert.equal(repeated.status, 201);
+  assert.equal((await repeated.json()).project.added, false);
+  const projectContent = await fs.readFile(serverProject.file, 'utf8');
+  assert.equal(projectContent.match(/^bookmarks:/gm).length, 1);
+  assert.equal(projectContent.match(/^tags:/gm).length, 1);
+  assert.ok(projectContent.indexOf('\ntags:\n') < projectContent.indexOf('\nbookmarks:\n'));
+  assert.match(projectContent, /tags:\n {2}- "reference"\n/);
+  assert.doesNotMatch(projectContent, /\r/);
+  assert.deepEqual((await projectBookmarks('server-project', bookmarkVault)).entries.map((entry) => entry.id), [savedResponse.result.id]);
+
+  await fs.writeFile(serverProject.file, projectContent.replace(/\n---\n/, '\n'));
+  const malformedSave = await fetch(`http://127.0.0.1:${port}/bookmarks`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(browserRequest({ url: 'https://example.test/must-not-save', project_id: 'server-project' }))
+  });
+  assert.equal(malformedSave.status, 400);
+  assert.match((await malformedSave.json()).error, /Invalid project frontmatter/);
+  assert.equal((await findBookmarks('must-not-save', bookmarkVault)).length, 0);
   assert.equal((await findBookmarks('', vaultPath)).length, 0);
 });

@@ -15,6 +15,23 @@ import { readList } from '../src/bookmark-format.js';
 const run = promisify(execFile);
 const cli = path.resolve('src', 'cli.js');
 
+test('vault init --git explicitly configures local LF defaults and rejects host Git from containers', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-cli-git-'));
+  const environment = { ...process.env, BOOKMARK_VAULT: root };
+  delete environment.BOOKMARK_RESULTS_HOST_VAULT;
+  const initialized = await run(process.execPath, [cli, 'vault', 'init', '--git'], { env: environment });
+  assert.match(initialized.stdout, /core.autocrlf=false; core.eol=lf/);
+  const config = await run('git', ['-C', root, 'config', '--local', '--get', 'core.eol']);
+  assert.equal(config.stdout.trim(), 'lf');
+  await assert.rejects(() => run(process.execPath, [cli, 'vault', 'init', '--git'], {
+    env: { ...environment, BOOKMARK_RESULTS_HOST_VAULT: 'C:\\Example Vault' }
+  }), /Run vault init --git on the host/);
+  const noGitRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-cli-no-git-'));
+  await assert.rejects(() => run(process.execPath, [cli, 'vault', 'init', '--git'], {
+    env: { ...environment, BOOKMARK_VAULT: noGitRoot, PATH: noGitRoot }
+  }), /Git was not found/);
+});
+
 async function readEventually(file) {
   for (let attempt = 0; attempt < 50; attempt++) {
     try { return await fs.readFile(file, 'utf8'); } catch (error) {
@@ -137,7 +154,7 @@ test('TUI help wins consistently and argument errors are concise', async () => {
   const helpCases = [
     [['find', '--help'], /Search bookmarks and print deterministic TUI results/],
     [['find', 'alpha', '--wat', '--help'], /Usage: npm run bookmark -- find QUERY/],
-    [['open', 'alpha', '--help'], /Find a bookmark and open its HTTP\/HTTPS URL/],
+    [['open', 'alpha', '--help'], /Find a bookmark and open its HTTP\/HTTPS or local document file:\/\/\/ URL/],
     [['save', '--wat', '--help'], /Save one HTTP\/HTTPS bookmark through the TUI/],
     [['vault', 'init', 'unexpected', '-h'], /vault init \[--path PATH\]/],
     [['vault', 'skill-install', '--help'], /vault skill-install \[--path PATH\]/],

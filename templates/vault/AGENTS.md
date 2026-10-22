@@ -88,6 +88,13 @@ Report missing references; do not silently discard or invent them. Inspect
 existing project and event records before assuming other detailed fields.
 
 Preserve unknown metadata. Keep access history separate from saved-page content.
+Use LF line endings when writing text. Keep one opening and closing `---`
+delimiter around frontmatter, close quoted values, and never duplicate metadata
+keys such as `bookmarks` or `tags`. Report malformed metadata before editing;
+do not guess which conflicting values should win.
+When writing projects, use metadata order `id`, `title`, `status`, `contexts`,
+`tags`, `bookmarks`, then preserve unknown fields in their existing relative
+order. Preserve bookmark order, entry metadata, notes, and Markdown body text.
 Keep the page `author`, link sender, and save device distinct. A bookmark can
 have multiple share and capture events. Missing sender data is normal: do not
 invent a sender or add an `unknown` placeholder. Do not infer a sender from an

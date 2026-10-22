@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readList, readScalar, replaceList } from './bookmark-format.js';
 import { listBookmarkFiles } from './vault-bookmark-files.js';
+import { createProjectContent, validateProjectContent, writeProject } from './project-format.js';
 
 function slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'project';
@@ -73,7 +74,9 @@ export async function listProjects(root) {
 }
 
 export async function resolveProject(reference, root) {
-  return selectUnique(await projectRecords(root), reference, 'project');
+  const project = selectUnique(await projectRecords(root), reference, 'project');
+  validateProjectContent(project.content, project.file);
+  return project;
 }
 
 export async function createProject(input, root) {
@@ -86,14 +89,8 @@ export async function createProject(input, root) {
   const file = path.join(root, 'projects', `${id}-${slug(title)}.md`);
   const contexts = normalizeList(input.contexts);
   const tags = normalizeList(input.tags).map((tag) => tag.toLowerCase());
-  const content = [
-    '---', `id: ${JSON.stringify(id)}`, `title: ${JSON.stringify(title)}`,
-    `status: ${JSON.stringify(input.status || 'active')}`,
-    'contexts:', ...(contexts.length ? contexts.map((value) => `  - ${JSON.stringify(value)}`) : ['  []']),
-    'tags:', ...(tags.length ? tags.map((value) => `  - ${JSON.stringify(value)}`) : ['  []']),
-    'bookmarks:', '  []', '---', '', '## Purpose', '', input.purpose || '', '', '## Presenter notes', '', input.notes || '', ''
-  ].join('\n');
-  await fs.writeFile(file, content, 'utf8');
+  const content = createProjectContent({ id, title, status: input.status || 'active', contexts, tags, purpose: input.purpose, notes: input.notes });
+  await writeProject(file, content);
   return { id, title, file };
 }
 
@@ -115,10 +112,9 @@ export async function addProjectBookmark(projectReference, bookmarkReference, ro
   else if (note !== undefined) bookmarks[existingIndex] = {
     ...bookmarks[existingIndex], notes: [...bookmarks[existingIndex].notes, safeText(note, 'Bookmark note')]
   };
-  const projectContent = replaceList(project.content, 'bookmarks', bookmarks);
   const bookmarkProjects = normalizeList([...readList(bookmark.content, 'projects'), project.id]);
   const bookmarkContent = replaceList(bookmark.content, 'projects', bookmarkProjects);
-  await fs.writeFile(project.file, projectContent, 'utf8');
+  await writeProject(project.file, project.content, { bookmarks });
   await fs.writeFile(bookmark.file, bookmarkContent, 'utf8');
   return { project: project.id, bookmark: bookmark.id, added: existingIndex < 0, noteAdded: existingIndex >= 0 && note !== undefined };
 }
@@ -129,7 +125,7 @@ export async function removeProjectBookmark(projectReference, bookmarkReference,
   ]);
   const bookmarks = project.bookmarks.filter((entry) => entry.id !== bookmark.id);
   const projects = readList(bookmark.content, 'projects').filter((id) => id !== project.id);
-  await fs.writeFile(project.file, replaceList(project.content, 'bookmarks', bookmarks), 'utf8');
+  await writeProject(project.file, project.content, { bookmarks });
   await fs.writeFile(bookmark.file, replaceList(bookmark.content, 'projects', projects), 'utf8');
   return { project: project.id, bookmark: bookmark.id, removed: bookmarks.length !== project.bookmarks.length };
 }
@@ -142,7 +138,7 @@ export async function addProjectBookmarkNote(projectReference, bookmarkReference
   if (index < 0) throw new Error(`Bookmark ${bookmark.id} is not linked to project ${project.id}`);
   const bookmarks = [...project.bookmarks];
   bookmarks[index] = { ...bookmarks[index], notes: [...bookmarks[index].notes, safeText(note, 'Bookmark note')] };
-  await fs.writeFile(project.file, replaceList(project.content, 'bookmarks', bookmarks), 'utf8');
+  await writeProject(project.file, project.content, { bookmarks });
   return { project: project.id, bookmark: bookmark.id, noteCount: bookmarks[index].notes.length };
 }
 
@@ -159,7 +155,7 @@ export async function removeProjectBookmarkNote(projectReference, bookmarkRefere
   }
   const bookmarks = [...project.bookmarks];
   bookmarks[index] = { ...bookmarks[index], notes: notes.filter((_note, position) => position !== noteIndex - 1) };
-  await fs.writeFile(project.file, replaceList(project.content, 'bookmarks', bookmarks), 'utf8');
+  await writeProject(project.file, project.content, { bookmarks });
   return { project: project.id, bookmark: bookmark.id, removed: notes[noteIndex - 1] };
 }
 
@@ -176,7 +172,7 @@ export async function moveProjectBookmark(projectReference, bookmarkReference, p
   const entry = bookmarks[oldIndex];
   bookmarks.splice(oldIndex, 1);
   bookmarks.splice(index - 1, 0, entry);
-  await fs.writeFile(project.file, replaceList(project.content, 'bookmarks', bookmarks), 'utf8');
+  await writeProject(project.file, project.content, { bookmarks });
   return { project: project.id, bookmark: bookmark.id, position: index };
 }
 

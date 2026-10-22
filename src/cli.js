@@ -8,12 +8,14 @@ import {
 } from './search-results-page.js';
 import { metadataValue, sortSearchResults } from './search-result-order.js';
 import { CANCELLED_SELECTION, interactiveResult, pickedResult } from './open-selection.js';
-import { readList } from './bookmark-format.js';
+import { readList, readScalar } from './bookmark-format.js';
+import { isOpenableBookmarkUrl } from './browser-target.js';
 import { parseFindArguments } from './tui-find-arguments.js';
 import { parseOpenArguments } from './tui-open-arguments.js';
 import { parseSaveArguments } from './tui-basic-arguments.js';
 import { parseVaultArguments } from './tui-vault-arguments.js';
 import { renderVaultGitHelp } from './vault-git-help.js';
+import { initializeVaultGit } from './vault-git-init.js';
 import {
   formatDirectoryCommand,
   hostDirectoryCommands,
@@ -133,7 +135,7 @@ function printVaultHelp(root, initialized = true) {
   const initialization = initialized
     ? ''
     : `No initialized bookmark vault was found at ${root}.\nFirst run: ${tuiCommand('vault init')}\n\n`;
-  console.log(`${initialization}Usage: ${tuiCommand('vault init [--path PATH]')}
+  console.log(`${initialization}Usage: ${tuiCommand('vault init [--path PATH] [--git]')}
    or: ${tuiCommand('vault skill-install [--path PATH]')}
    or: ${tuiCommand('vault status')}
    or: ${tuiCommand('vault git-help [--full]')}
@@ -147,6 +149,7 @@ open uses the native file explorer; Docker/container prints a host command inste
 
 Options:
   --path PATH       Select a path for init or skill-install.
+  --git             Initialize/configure host Git for LF; only with vault init.
   --full            Show the complete detailed tag audit, or extended Git help.
   --dry-run         Print the native file-explorer command without running it.
   --check           Return a failure status when tag-lint finds warnings.
@@ -270,7 +273,7 @@ Examples:
 function printOpenHelp() {
   console.log(`Usage: npm run bookmark -- open QUERY [options]
 
-Find a bookmark and open its HTTP/HTTPS URL.
+Find a bookmark and open its HTTP/HTTPS or local document file:/// URL.
 
 When using npm, keep the "--" after "bookmark" so npm forwards every option
 below to this CLI.
@@ -387,7 +390,7 @@ function printProject(project, entries) {
 
 function printHelp() {
   console.log(`Markdown Bookmarks commands:
-  vault init [--path PATH]
+  vault init [--path PATH] [--git]
   vault skill-install [--path PATH]
   vault status
   vault git-help [--full]
@@ -500,9 +503,14 @@ async function runTui() {
     const initialized = await isVaultInitialized(root);
     if (options.help) return printVaultHelp(root, initialized);
     if (options.action === 'init') {
+      if (options.git && process.env.BOOKMARK_RESULTS_HOST_VAULT) {
+        throw new Error('Run vault init --git on the host using the native CLI. Containers must not configure host Git. See vault git-help --full for host commands.');
+      }
       await initVault(root);
+      if (options.git) await initializeVaultGit(root);
       console.log(`Vault ready: ${root}`);
-      console.log('Next: git -C "' + root + '" init');
+      if (options.git) console.log('Git configured locally: core.autocrlf=false; core.eol=lf. No files staged or committed.');
+      else console.log('Next: vault init --git on the host to initialize/configure Git with LF defaults.');
     } else if (options.action === 'git-help') {
       const hostRoot = process.env.BOOKMARK_RESULTS_HOST_VAULT;
       console.log(renderVaultGitHelp(root, {
@@ -590,8 +598,8 @@ async function runTui() {
     if (request.action === 'show') return printProject(result.project, result.entries);
     const missing = result.entries.filter((entry) => entry.missing);
     if (missing.length) throw new Error(`Project has ${missing.length} missing bookmark reference${missing.length === 1 ? '' : 's'}: ${missing.map((entry) => entry.id).join(', ')}`);
-    const unsafe = result.entries.filter((entry) => !/^https?:\/\//i.test(entry.url || ''));
-    if (unsafe.length) throw new Error(`Project has bookmark(s) without safe HTTP URLs: ${unsafe.map((entry) => entry.id).join(', ')}`);
+    const unsafe = result.entries.filter((entry) => !isOpenableBookmarkUrl(entry.url));
+    if (unsafe.length) throw new Error(`Project has bookmark(s) without supported browser URLs (HTTP/HTTPS or absolute local document file:///): ${unsafe.map((entry) => entry.id).join(', ')}`);
     if (request.dryRun || process.env.BOOKMARK_RESULTS_HOST_VAULT) {
       result.entries.forEach((entry, index) => console.log(`${index + 1}. ${entry.url}`));
       if (process.env.BOOKMARK_RESULTS_HOST_VAULT && !request.dryRun) console.log('Open these project tabs on the host browser.');
@@ -659,8 +667,8 @@ async function runTui() {
       return;
     }
     if (!selection) throw new Error(`No bookmark found for: ${request.query}`);
-    const url = selection.content.match(/^url:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
-    if (!url || !/^https?:\/\//i.test(url)) throw new Error(`Bookmark has no safe HTTP URL: ${selection.file}`);
+    const url = readScalar(selection.content, 'url');
+    if (!isOpenableBookmarkUrl(url)) throw new Error(`Bookmark has no supported browser URL (HTTP/HTTPS or absolute local document file:///): ${selection.file}`);
     if (request.dryRun) console.log(url);
     else if (process.env.BOOKMARK_RESULTS_HOST_VAULT) {
       console.log(`Open bookmark${request.withBrowser ? ` in ${request.withBrowser}` : ''}: ${url}`);

@@ -25,7 +25,9 @@ Keep your bookmarks in a separate private Git repository.
 ```bash
 mkdir my-bookmarks
 cd my-bookmarks
-git init
+git init -b main
+git config --local core.autocrlf false
+git config --local core.eol lf
 cd ../markdown-bookmarks
 ```
 
@@ -52,12 +54,33 @@ $env:BOOKMARK_VAULT = "$HOME\Documents\my-bookmarks"
 docker compose run --rm bookmarkd node src/cli.js vault init
 ```
 
-The command creates the standard vault directories, a README, and a
-`.gitattributes` file that normalizes text files to Unix LF line endings. It
-does not overwrite those existing files. It installs a companion-managed
+The command creates the standard vault directories, a README, LF-default
+`.gitattributes`, and `.editorconfig` for editors that support it. Existing
+README content and custom Git/editor rules are preserved; settings files are
+normalized to LF and a missing default Git rule is added. It installs a companion-managed
 `AGENTS.md` in the vault root with portable structure, privacy, editing, and
 search instructions for LLM agents. Keep `AGENTS.md` versioned in the private
 vault so every machine receives the same instructions.
+
+With native npm/the PowerShell wrapper and Git installed on the host, initialize
+the vault and its private Git repository together:
+
+```powershell
+bookmark vault init --git
+# Or: npm run bookmark -- vault init --git
+```
+
+New repositories use `main`. Existing repositories keep their current branch
+and other settings. Both get repository-local `core.autocrlf=false` and
+`core.eol=lf`. Nothing is staged, committed, or pushed. Plain `vault init`
+does not run Git, and container-based `--git` is rejected: use host Git or
+the commands shown by `vault git-help --full` instead.
+
+LF is the default for text written by the app. Editing a CRLF project through
+the app normalizes its line endings while preserving its metadata and notes.
+Git configuration alone does not rewrite existing working files or repair
+malformed Markdown. Project edits reject duplicate frontmatter fields,
+missing delimiters, and incomplete quoted IDs/titles rather than guessing a repair.
 
 Optionally install the Codex-specific vault skill with:
 
@@ -392,12 +415,25 @@ npm run bookmark -- project open ai-assisted-app-talk
 npm run bookmark -- project open ai-assisted-app-talk --with chrome
 ```
 
-`project open` opens every safe HTTP/HTTPS URL through your system default
+Project saves use one consistent metadata order: `id`, `title`, `status`,
+`contexts`, `tags`, then `bookmarks`. Unknown fields are preserved after these.
+Browser saves, CLI edits, and project-note migration rewrites share this format.
+Existing files get the consistent order on their next save; reads do not rewrite them.
+
+`project open` opens HTTP/HTTPS links and supported local document `file:///`
+URLs through your system default
 browser when `--with` is omitted. It submits URLs in project order; the default
 browser controls tab placement and whether it reuses an existing window. Pass
 `--with chrome` or `--with firefox` to request all tabs in one new window. It refuses
 to launch a partial presentation when a referenced bookmark is missing or has
 no safe URL. In Docker/container it prints the ordered URLs for opening on the host browser.
+Absolute local Windows and macOS file URLs are supported for HTML/HTM, SVG,
+PDF, TXT, and PNG/JPEG/GIF/WebP/AVIF images. For example,
+`file:///C:/Example%20Documents/presentation.html` can be opened by either
+`bookmark open ID` or `bookmark project open PROJECT --with chrome`.
+Run these on the host so the browser can access the local files. Network file
+shares, relative file URLs, executable files, and executable URL schemes are
+rejected. Generated `find --browser` pages still only make HTTP/HTTPS links clickable.
 Use `--note` with `project add`, or `project note add` later, for numbered
 presenter cues shown by `project show`. Add as many as needed; `project note
 remove --pick NUMBER` deletes only that cue. Notes stay attached when tabs are

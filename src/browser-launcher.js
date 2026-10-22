@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { assertBrowserTarget } from './browser-target.js';
 
 export const BROWSER_ALIASES = {
   chrome: { win32: 'chrome.exe', darwin: 'Google Chrome', linux: 'google-chrome' },
@@ -31,6 +32,7 @@ export function browserCommand(target, platform = process.platform, browser, {
   environment = process.env,
   exists = fs.existsSync
 } = {}) {
+  assertBrowserTarget(target);
   if (browser) {
     const application = browserApplication(browser, platform, environment, exists);
     if (platform === 'darwin') return { command: 'open', args: ['-a', application, target] };
@@ -51,6 +53,7 @@ function windowArguments(browser, targets) {
 
 export function browserWindowCommand(targets, platform = process.platform, browser, options = {}) {
   if (!Array.isArray(targets) || !targets.length) throw new Error('At least one browser target is required');
+  targets.forEach(assertBrowserTarget);
   if (!browser) throw new Error('An explicit browser is required to force a new window');
   const application = browserApplication(browser, platform, options.environment || process.env, options.exists || fs.existsSync);
   const args = windowArguments(browser, targets);
@@ -83,6 +86,7 @@ export function openInBrowser(target, browser, platform = process.platform, spaw
 
 export function openInBrowserWindow(targets, browser, platform = process.platform, spawnProcess = spawn) {
   if (!Array.isArray(targets) || !targets.length) throw new Error('At least one browser target is required');
+  targets.forEach(assertBrowserTarget);
   if (!browser) {
     return (async () => {
       for (const target of targets) await openInBrowser(target, undefined, platform, spawnProcess);

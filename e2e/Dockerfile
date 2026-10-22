@@ -1,4 +1,5 @@
 FROM mcr.microsoft.com/playwright:v1.63.0-noble
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /e2e
 COPY package.json ./package.json
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1

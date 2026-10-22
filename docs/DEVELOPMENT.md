@@ -89,6 +89,15 @@ an ordered `notes` list of short presenter cues; preserve it when reordering
 entries. Schema v4 migrates earlier single `note` values to this list.
 Preserve unknown project metadata.
 
+All project creation and edits use `src/project-format.js` for validation,
+formatting, and writing. The canonical frontmatter order is `id`, `title`,
+`status`, `contexts`, `tags`, `bookmarks`, then unknown fields in their original
+relative order. Move whole metadata blocks so nested unknown fields and comments
+are preserved, and never reorder Markdown body text. Existing project files are
+normalized on their next app save, not on reads. Project-note migrations use
+the same formatter when rewriting a record. Browser project linking and all
+CLI project mutations must go through this component.
+
 `project open PROJECT` uses the platform default browser when `--with` is
 omitted, submitting each validated URL in project order. Window placement is
 controlled by the default browser. An explicit `--with` requests a new browser
@@ -281,6 +290,20 @@ needs the diagnostic stack.
 `vault git-help` only renders commands for the selected vault. It must not run
 Git, inspect credentials or remotes, or access the network. `--full` adds less
 common initialization, synchronization, and conflict guidance.
+
+LF is the default for generated text. Metadata writers normalize CRLF/mixed
+input to LF before replacing fields. Project writes require bounded frontmatter,
+unique top-level fields, and complete inline quoted IDs/titles; reject malformed
+records before a browser save mutates the bookmark. Never silently merge
+duplicate fields or project entries. Tests must cover CRLF browser saves,
+repeated project linking, and preservation of tags, notes, and ordering.
+
+Plain `vault init` installs LF `.gitattributes`/`.editorconfig` defaults without
+running Git. Explicit native `vault init --git` initializes a new repository on
+`main` or configures an existing one, setting only local `core.autocrlf=false`
+and `core.eol=lf`. Preserve existing branches and other config. Do not stage,
+commit, contact remotes, or configure host Git from inside a container. Git is
+included in test images only; the runtime image does not install it.
 `vault open` launches the native file explorer; in Docker/container it prints host-side
 commands instead. `--dry-run` never launches an application.
 When the schema manifest is absent, vault help and Git help lead with
@@ -326,7 +349,14 @@ or numbers use normal substring matching. `--fuzzy` is explicit and keeps short
 terms strict.
 ranking must feed text output, generated browser pages, and `open --pick`.
 
-`open` validates HTTP/HTTPS URLs before launching the platform default browser.
+`open` and `project open` share `src/browser-target.js` validation before
+launching the platform default browser or an explicitly selected browser.
+Accept HTTP/HTTPS and absolute local `file:///` document URLs (HTML/HTM, SVG,
+PDF, TXT, PNG/JPEG/GIF/WebP/AVIF). Reject network/UNC hosts, relative file URLs,
+encoded path separators/control characters, alternate streams, executable
+files and schemes. Validate every project target before starting any process.
+Browser launch helpers also enforce this boundary. Do not use this wider
+allowlist for generated search HTML: its links remain HTTP/HTTPS-only.
 A unique match opens directly; multiple matches are sorted by title and shown
 as numbered choices. Interactive terminals prompt for a number, while
 non-interactive use requires `--pick NUMBER`. Time-filtered find/open workflows

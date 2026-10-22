@@ -98,6 +98,14 @@ test('creates unique private pages and only purges stale generated pages', async
   }
 });
 
+test('generated search HTML does not make local file bookmarks clickable', () => {
+  const html = renderSearchResultsPage('local document', [result('local.md', {
+    title: 'Local document', url: 'file:///C:/Example/presentation.html'
+  })]);
+  assert.doesNotMatch(html, /href="file:/);
+  assert.match(html, /aria-disabled="true">Unavailable/);
+});
+
 test('selects safe native browser launcher commands', () => {
   const target = 'file:///tmp/results.html';
   assert.deepEqual(browserCommand(target, 'win32'),

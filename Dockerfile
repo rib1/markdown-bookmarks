@@ -1,4 +1,5 @@
 FROM node:26-alpine AS quality
+RUN apk add --no-cache git
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund

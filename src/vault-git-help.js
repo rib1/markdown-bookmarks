@@ -69,6 +69,8 @@ Never restore AGENTS.md before reviewing its diff.
 
 Start a new private vault repository:
 ${git('init -b main')}
+${git('config --local core.autocrlf false')}
+${git('config --local core.eol lf')}
 ${git('add -A')}
 ${git('commit -m "Initialize bookmark vault"')}
 ${git('remote add origin <PRIVATE-REPOSITORY-URL>')}

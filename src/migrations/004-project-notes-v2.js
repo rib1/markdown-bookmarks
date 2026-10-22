@@ -1,4 +1,5 @@
-import { readList, replaceList } from '../bookmark-format.js';
+import { readList } from '../bookmark-format.js';
+import { formatProjectContent } from '../project-format.js';
 
 export const version = 4;
 export const fromVersion = 3;
@@ -21,5 +22,5 @@ export function migrateProject(content) {
     return { ...unknown, id: value.id, notes: normalizedNotes };
   });
   const changed = JSON.stringify(original) !== JSON.stringify(bookmarks);
-  return { content: changed ? replaceList(content, 'bookmarks', bookmarks) : content, migrated: changed ? 1 : 0 };
+  return { content: changed ? formatProjectContent(content, { bookmarks }) : content, migrated: changed ? 1 : 0 };
 }

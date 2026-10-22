@@ -43,7 +43,12 @@ export function yamlList(values) {
   return values.length ? values.map((value) => `  - ${JSON.stringify(value)}`).join('\n') : '  []';
 }
 
+export function normalizeLineEndings(content) {
+  return content.replace(/\r\n?/g, '\n');
+}
+
 export function replaceScalar(content, field, value) {
+  content = normalizeLineEndings(content);
   const line = `${field}: ${JSON.stringify(value)}`;
   const pattern = new RegExp(`^${field}:.*$`, 'm');
   return pattern.test(content) ? content.replace(pattern, line) : content.replace(/^---\n/, `---\n${line}\n`);
@@ -57,12 +62,14 @@ export function readScalar(content, field) {
 }
 
 export function removeScalar(content, field) {
+  content = normalizeLineEndings(content);
   return content.replace(new RegExp(`^${field}:.*(?:\\n|$)`, 'm'), '');
 }
 
 export function replaceList(content, field, values) {
+  content = normalizeLineEndings(content);
   const block = `${field}:\n${yamlList(values)}\n`;
-  const pattern = new RegExp(`^${field}:\\n(?:  - .*\\n|  \\[\\]\\n)*`, 'm');
+  const pattern = new RegExp(`^${field}:(?:\\n|$)(?:  - [^\\n]*(?:\\n|$)|  \\[\\](?:\\n|$))*`, 'm');
   if (pattern.test(content)) return content.replace(pattern, block);
   if (/^tags:/m.test(content)) return content.replace(/^tags:/m, `${block}tags:`);
   return content.replace(/^---\n/, `---\n${block}`);

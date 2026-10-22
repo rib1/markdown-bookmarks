@@ -65,6 +65,8 @@ test('basic command parsers reject unsupported arguments and honor help', () => 
 
 test('vault command parser follows the shared option contract', () => {
   assert.equal(parseVaultArguments(['init', '--path', '/vault']).path, '/vault');
+  assert.equal(parseVaultArguments(['init', '--git']).git, true);
+  fails('unsupported_option', () => parseVaultArguments(['status', '--git']));
   assert.equal(parseVaultArguments(['skill-install', '--path', '/vault']).path, '/vault');
   assert.equal(parseVaultArguments(['status']).action, 'status');
   assert.equal(parseVaultArguments(['git-help']).full, false);

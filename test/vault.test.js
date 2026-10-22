@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { initializeVaultGit } from '../src/vault-git-init.js';
 import {
   findBookmarks,
   initVault,
@@ -47,6 +50,8 @@ test('initializes a vault with AGENTS.md but without the optional skill', async 
   const vaultAgents = path.join(root, 'AGENTS.md');
   const skill = path.join(root, '.codex', 'skills', 'markdown-bookmark-vault', 'SKILL.md');
   assert.equal(await fs.readFile(attributes, 'utf8'), '* text=auto eol=lf\n');
+  assert.match(await fs.readFile(path.join(root, '.editorconfig'), 'utf8'), /end_of_line = lf\n/);
+  await assert.rejects(() => fs.access(path.join(root, '.git')), { code: 'ENOENT' });
   assert.equal(await fs.readFile(ignore, 'utf8'), '.DS_Store\n/views/.search-results/\n');
   assert.deepEqual(JSON.parse(await fs.readFile(schema, 'utf8')), { schema_version: BOOKMARK_SCHEMA_VERSION });
   const readmeContent = await fs.readFile(readme, 'utf8');
@@ -59,6 +64,38 @@ test('initializes a vault with AGENTS.md but without the optional skill', async 
   await fs.writeFile(readme, 'my custom vault README\n', 'utf8');
   await initVault(root);
   assert.equal(await fs.readFile(readme, 'utf8'), 'my custom vault README\n');
+});
+
+test('vault init installs LF defaults idempotently and preserves custom settings', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-lf-defaults-'));
+  await fs.writeFile(path.join(root, '.gitattributes'), '*.png binary\r\n');
+  await fs.writeFile(path.join(root, '.editorconfig'), 'root = true\r\n\r\n[*.md]\r\nend_of_line = lf\r\nindent_size = 2\r\n');
+  await initVault(root);
+  await initVault(root);
+  assert.equal(await fs.readFile(path.join(root, '.gitattributes'), 'utf8'), '* text=auto eol=lf\n*.png binary\n');
+  assert.equal(await fs.readFile(path.join(root, '.editorconfig'), 'utf8'), 'root = true\n\n[*.md]\nend_of_line = lf\nindent_size = 2\n');
+});
+
+test('explicit Git setup defaults to LF locally and preserves existing repositories without staging', async () => {
+  const runGit = promisify(execFile);
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-git-init-'));
+  await initVault(root);
+  assert.equal((await initializeVaultGit(root)).initialized, true);
+  const git = (...args) => runGit('git', ['-C', root, ...args]);
+  assert.equal((await git('symbolic-ref', '--short', 'HEAD')).stdout.trim(), 'main');
+  assert.equal((await git('config', '--local', '--get', 'core.autocrlf')).stdout.trim(), 'false');
+  assert.equal((await git('config', '--local', '--get', 'core.eol')).stdout.trim(), 'lf');
+  assert.equal((await git('diff', '--cached', '--name-only')).stdout, '');
+  assert.equal((await git('remote')).stdout, '');
+  await git('config', '--local', 'bookmark.custom', 'preserved');
+  await git('symbolic-ref', 'HEAD', 'refs/heads/existing');
+  await git('config', '--local', 'core.autocrlf', 'true');
+  assert.equal((await initializeVaultGit(root)).initialized, false);
+  assert.equal((await git('symbolic-ref', '--short', 'HEAD')).stdout.trim(), 'existing');
+  assert.equal((await git('config', '--local', '--get', 'bookmark.custom')).stdout.trim(), 'preserved');
+  assert.equal((await git('config', '--local', '--get', 'core.autocrlf')).stdout.trim(), 'false');
+  // Explicit LF attributes override even an inherited Windows autocrlf setting.
+  assert.match((await git('-c', 'core.autocrlf=true', 'check-attr', 'eol', '--', 'example.md')).stdout, /eol: lf/);
 });
 
 test('migrates legacy save attributes and repairs definite tag contamination once', async () => {

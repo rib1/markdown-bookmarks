@@ -17,6 +17,8 @@ test('full Git help adds advanced guidance and safe examples', () => {
   const output = renderVaultGitHelp('/Users/example/My Bookmarks', { full: true });
   assert.match(output, /git -C "\/Users\/example\/My Bookmarks" fetch/);
   assert.match(output, /init -b main/);
+  assert.match(output, /config --local core.autocrlf false/);
+  assert.match(output, /config --local core.eol lf/);
   assert.match(output, /PRIVATE-REPOSITORY-URL/);
   assert.match(output, /Add 3 bookmarks and update 2/);
   assert.match(output, /rebase --continue/);

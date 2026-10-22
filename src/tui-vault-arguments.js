@@ -3,6 +3,7 @@ import { argumentError, parseTuiArguments } from './tui-arguments.js';
 export const VAULT_COMMANDS = Object.freeze(['init', 'skill-install', 'status', 'git-help', 'open', 'tag-lint', 'tag-fix']);
 
 export const vaultOptions = {
+  '--git': { key: 'git', type: 'boolean' },
   '--full': { key: 'full', type: 'boolean' },
   '--dry-run': { key: 'dryRun', type: 'boolean' },
   '--path': { key: 'path', type: 'value', valueLabel: 'a vault path' },
@@ -18,6 +19,9 @@ export function parseVaultArguments(args) {
   const [action] = parsed.positionals;
   if (!VAULT_COMMANDS.includes(action)) {
     throw argumentError('invalid_subcommand', 'Usage: npm run bookmark -- vault COMMAND [options]. Run vault --help.');
+  }
+  if (action !== 'init' && parsed.git) {
+    throw argumentError('unsupported_option', '--git is only supported by vault init');
   }
   if (!['git-help', 'tag-lint'].includes(action) && parsed.full) {
     throw argumentError('unsupported_option', '--full is only supported by vault git-help and vault tag-lint');
