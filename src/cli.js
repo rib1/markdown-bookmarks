@@ -23,6 +23,7 @@ import {
 } from './vault-directory-launcher.js';
 import { isVaultInitialized } from './vault-state.js';
 import { fixVaultTags, lintVaultTags } from './tag-maintenance.js';
+import { dedupeVaultBookmarks } from './bookmark-dedupe.js';
 import { inspectVaultStatus, renderVaultStatus } from './vault-status.js';
 import {
   addProjectBookmark, createProject, listProjects, moveProjectBookmark,
@@ -142,6 +143,7 @@ function printVaultHelp(root, initialized = true) {
    or: ${tuiCommand('vault open [--dry-run]')}
    or: ${tuiCommand('vault tag-lint [--full] [--check]')}
    or: ${tuiCommand('vault tag-fix --from TAG --to TAG [--apply]')}
+   or: ${tuiCommand('vault dedupe [--check] [--apply]')}
 
 No Git command is run and no network connection is made by status or git-help.
 Status can compare local HEAD with the last fetched upstream checkpoint. Vault
@@ -152,10 +154,10 @@ Options:
   --git             Initialize/configure host Git for LF; only with vault init.
   --full            Show the complete detailed tag audit, or extended Git help.
   --dry-run         Print the native file-explorer command without running it.
-  --check           Return a failure status when tag-lint finds warnings.
+  --check           Return a failure status when tag-lint or dedupe finds warnings.
   --from TAG        Misspelled source tag for tag-fix.
   --to TAG          Existing canonical tag for tag-fix.
-  --apply           Apply tag-fix; without it, only preview changes.
+  --apply           Apply tag-fix or dedupe; without it, only preview changes.
   --help, -h        Show this help.`);
 }
 
@@ -205,6 +207,32 @@ function printTagFixResult(result) {
   });
   if (result.applied) {
     console.log(`Changed ${result.changed.length} bookmark file${result.changed.length === 1 ? '' : 's'}.`);
+    console.log('Review the vault changes before committing them.');
+  } else {
+    console.log('No files changed. Repeat with --apply after review.');
+  }
+}
+
+function printDedupeResult(result) {
+  if (!result.groups.length) {
+    console.log(`Dedupe: no duplicate bookmarks across ${result.bookmarkCount} bookmark${result.bookmarkCount === 1 ? '' : 's'}.`);
+    return;
+  }
+  console.log(`Dedupe ${result.applied ? 'applied' : 'preview'}: ${result.groups.length} duplicate URL group${result.groups.length === 1 ? '' : 's'} (${result.removals.length} duplicate file${result.removals.length === 1 ? '' : 's'} to remove) across ${result.bookmarkCount} bookmark${result.bookmarkCount === 1 ? '' : 's'}.`);
+  result.groups.forEach((group, index) => {
+    console.log(`${index + 1}. ${group.canonicalUrl}`);
+    console.log(`   KEEP: ${shortBookmarkId(group.keep)} ${group.keep.file}`);
+    group.remove.forEach((record) => {
+      console.log(`   MERGE: ${shortBookmarkId(record)} ${record.file}`);
+    });
+    console.log(`   TAGS: ${group.mergedTags.join(', ') || '(none)'}`);
+    if (group.notesMerged) console.log('   NOTES: merged from duplicate record(s)');
+  });
+  if (result.projectEdits.length) {
+    console.log(`Projects updated: ${result.projectEdits.map((edit) => edit.file).join(', ')}`);
+  }
+  if (result.applied) {
+    console.log(`Merged ${result.groups.length} duplicate group${result.groups.length === 1 ? '' : 's'}; updated ${result.changed.length} file${result.changed.length === 1 ? '' : 's'} and removed ${result.removed.length} duplicate bookmark file${result.removed.length === 1 ? '' : 's'}.`);
     console.log('Review the vault changes before committing them.');
   } else {
     console.log('No files changed. Repeat with --apply after review.');
@@ -397,6 +425,7 @@ function printHelp() {
   vault open [--dry-run]
   vault tag-lint [--full] [--check]
   vault tag-fix --from TAG --to TAG [--apply]
+  vault dedupe [--check] [--apply]
   save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
   find [QUERY] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
   open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
@@ -429,6 +458,7 @@ Common workflows:
   npm run bookmark -- vault git-help
   npm run bookmark -- vault open
   npm run bookmark -- vault tag-lint
+  npm run bookmark -- vault dedupe
   npm run bookmark -- project create --id my-talk --title "My tab presentation"
   npm run bookmark -- save --url https://example.test/page --shared-by Alice --via Signal
   npm run bookmark -- find database
@@ -471,6 +501,9 @@ async function printNamedHelp(name) {
   if (name === 'skill') {
     throw new Error('The skill command moved: npm run bookmark -- vault skill-install [--path PATH]');
   }
+  if (name === 'dedupe') {
+    throw new Error('The dedupe command is under vault: npm run bookmark -- vault dedupe [--check] [--apply]');
+  }
   if (name === 'vault') {
     const root = vaultRoot();
     return printVaultHelp(root, await isVaultInitialized(root));
@@ -495,6 +528,9 @@ async function runTui() {
   if (command === 'init') throw new Error('The init command moved: npm run bookmark -- vault init [options]');
   if (command === 'skill') {
     throw new Error('The skill command moved: npm run bookmark -- vault skill-install [--path PATH]');
+  }
+  if (command === 'dedupe') {
+    throw new Error('The dedupe command is under vault: npm run bookmark -- vault dedupe [--check] [--apply]');
   }
   if (!TUI_COMMANDS.includes(command)) throw new Error(`Unknown command: ${command}. Run npm run bookmark -- help.`);
   if (command === 'vault') {
@@ -537,6 +573,10 @@ async function runTui() {
         printTagLintReport(report, options.full);
         const selectedCandidates = options.full ? report.candidates : report.likelyCandidates;
         if (options.check && selectedCandidates.length) process.exitCode = 1;
+      } else if (options.action === 'dedupe') {
+        const result = await dedupeVaultBookmarks(root, { apply: options.apply });
+        printDedupeResult(result);
+        if (options.check && result.groups.length) process.exitCode = 1;
       } else {
         printTagFixResult(await fixVaultTags(root, {
           from: options.from,

@@ -80,6 +80,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(generalHelp.stdout, /vault open \[--dry-run\]/);
   assert.match(generalHelp.stdout, /vault tag-lint \[--full\] \[--check\]/);
   assert.match(generalHelp.stdout, /vault tag-fix --from TAG --to TAG \[--apply\]/);
+  assert.match(generalHelp.stdout, /vault dedupe \[--check\] \[--apply\]/);
   assert.match(generalHelp.stdout, /find \[QUERY\] .*--fuzzy.*--browser/);
   assert.match(generalHelp.stdout, /Keep the "--" in "npm run bookmark -- COMMAND"/);
   assert.match(generalHelp.stdout, /--browser, --fuzzy, --expand, --pick, --saved-within, --saved-since, --with,/);
@@ -145,6 +146,7 @@ test('CLI help lists commands, launch options, browser choices, and linked workf
   assert.match(vaultHelp.stdout, /vault open \[--dry-run\]/);
   assert.match(vaultHelp.stdout, /vault tag-lint \[--full\] \[--check\]/);
   assert.match(vaultHelp.stdout, /tag-fix --from TAG --to TAG \[--apply\]/);
+  assert.match(vaultHelp.stdout, /vault dedupe \[--check\] \[--apply\]/);
   assert.match(vaultHelp.stdout, /No Git command is run/);
 });
 
@@ -191,6 +193,8 @@ test('TUI help wins consistently and argument errors are concise', async () => {
     [['vault', 'open', '--full'], /--full is only supported by vault git-help/],
     [['vault', 'tag-fix', '--from', 'wordpres'], /vault tag-fix --from TAG --to TAG/],
     [['vault', 'tag-lint', '--apply'], /--from, --to, and --apply are only supported/],
+    [['vault', 'dedupe', '--check', '--apply'], /Use either --check or --apply, not both/],
+    [['dedupe'], /The dedupe command is under vault: npm run bookmark -- vault dedupe/],
     [['unknown'], /Unknown command: unknown/]
   ];
   for (const [arguments_, expected] of errorCases) {
@@ -273,6 +277,73 @@ test('vault tag maintenance reports, checks, previews, and applies reviewed fixe
     () => run(process.execPath, [cli, 'vault', 'tag-lint', '--full', '--check'], { env }),
     (error) => error.code === 1 && /Tag lint full audit/.test(error.stdout)
   );
+});
+
+test('vault dedupe previews, checks, and merges duplicate bookmarks through the CLI', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'markdown-bookmarks-cli-dedupe-'));
+  const env = { ...process.env, BOOKMARK_VAULT: root };
+  delete env.BOOKMARK_RESULTS_HOST_VAULT;
+  await run(process.execPath, [cli, 'vault', 'init'], { env });
+
+  const first = await saveBookmark({
+    url: 'https://example.test/dedupe-target',
+    title: 'Original Title',
+    tags: ['alpha'],
+    summary: 'First note.',
+    saved_at: '2026-09-01T10:00:00.000Z'
+  }, root);
+
+  const duplicateDir = path.join(root, 'bookmarks', '2026', '09');
+  const duplicateFile = path.join(duplicateDir, 'second-dup.md');
+  await fs.writeFile(duplicateFile, `---
+schema_version: 4
+id: "second-dup"
+url: "https://example.test/dedupe-target?utm_source=social#frag"
+canonical_url: "https://example.test/dedupe-target"
+title: "Duplicate Title"
+type: "bookmark"
+contexts:
+  - "work"
+tags:
+  - "beta"
+saved_at: "2026-09-02T10:00:00.000Z"
+first_saved_at: "2026-09-02T10:00:00.000Z"
+last_saved_at: "2026-09-02T10:00:00.000Z"
+save_count: 1
+save_history:
+  - "2026-09-02T10:00:00.000Z"
+---
+
+## Summary
+
+Second note.
+`, 'utf8');
+
+  const preview = await run(process.execPath, [cli, 'vault', 'dedupe'], { env });
+  assert.match(preview.stdout, /Dedupe preview: 1 duplicate URL group \(1 duplicate file to remove\) across 2 bookmarks\./);
+  assert.match(preview.stdout, /1\. https:\/\/example\.test\/dedupe-target/);
+  assert.match(preview.stdout, new RegExp(`KEEP: ${first.id.slice(0, 8)}`));
+  assert.match(preview.stdout, /MERGE: second-d/);
+  assert.match(preview.stdout, /TAGS: alpha, beta/);
+  assert.match(preview.stdout, /NOTES: merged from duplicate record\(s\)/);
+  assert.match(preview.stdout, /No files changed\. Repeat with --apply after review\./);
+
+  await assert.rejects(
+    () => run(process.execPath, [cli, 'vault', 'dedupe', '--check'], { env }),
+    (error) => error.code === 1 && /Dedupe preview: 1 duplicate URL group/.test(error.stdout)
+  );
+
+  const applied = await run(process.execPath, [cli, 'vault', 'dedupe', '--apply'], { env });
+  assert.match(applied.stdout, /Dedupe applied: 1 duplicate URL group/);
+  assert.match(applied.stdout, /Merged 1 duplicate group; updated 1 file and removed 1 duplicate bookmark file\./);
+  await assert.rejects(() => fs.access(duplicateFile), { code: 'ENOENT' });
+
+  const merged = await fs.readFile(first.file, 'utf8');
+  assert.deepEqual(readList(merged, 'tags'), ['alpha', 'beta']);
+  assert.match(merged, /First note\.\n\nSecond note\./);
+
+  const cleanCheck = await run(process.execPath, [cli, 'vault', 'dedupe', '--check'], { env });
+  assert.match(cleanCheck.stdout, /Dedupe: no duplicate bookmarks across 1 bookmark\./);
 });
 
 test('vault commands render Git help and safe file-explorer commands', async () => {

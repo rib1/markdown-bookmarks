@@ -681,6 +681,28 @@ The canonical tag must already exist. Preview changes no files. When both tags
 occur in one bookmark, applying the fix removes the misspelled tag instead of
 creating a duplicate. The command never commits or pushes vault changes.
 
+## Review and merge duplicate bookmarks
+
+Preview duplicate bookmarks that resolve to the same canonical URL:
+
+```powershell
+npm run bookmark -- vault dedupe
+```
+
+Use `--check` when a script should fail if duplicate bookmark records exist.
+When ready, merge each duplicate group into its earliest-saved bookmark and
+remove the redundant duplicate files:
+
+```powershell
+npm run bookmark -- vault dedupe --apply
+```
+
+Deduplication preserves the earliest record's stable ID and file path, merges
+tags, contexts, site metadata, unknown frontmatter fields, distinct Markdown
+notes, and save/share/capture history, and updates any project references to
+point to the surviving bookmark ID. Review the resulting changes with Git before
+committing them.
+
 ## Check vault status
 
 Show bookmark, project, event, and unique-tag counts; schema and instruction

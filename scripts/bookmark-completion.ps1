@@ -1,6 +1,6 @@
 # Static, offline completion for the simple bookmark forwarding function.
 $bookmarkCommands = @('find', 'open', 'save', 'vault', 'project', 'help')
-$bookmarkVaultCommands = @('init', 'skill-install', 'status', 'git-help', 'open', 'tag-lint', 'tag-fix')
+$bookmarkVaultCommands = @('init', 'skill-install', 'status', 'git-help', 'open', 'tag-lint', 'tag-fix', 'dedupe')
 $bookmarkProjectCommands = @('create', 'list', 'show', 'add', 'remove', 'move', 'note', 'open')
 $bookmarkOptions = @{
     'find' = @('--saved-within', '--saved-since', '--fuzzy', '--expand', '--browser', '--with', '--dry-run')
@@ -13,6 +13,7 @@ $bookmarkOptions = @{
     'vault open' = @('--dry-run')
     'vault tag-lint' = @('--full', '--check')
     'vault tag-fix' = @('--from', '--to', '--apply')
+    'vault dedupe' = @('--check', '--apply')
     'project create' = @('--title', '--id', '--status', '--contexts', '--tags', '--purpose', '--notes')
     'project list' = @()
     'project show' = @()
@@ -98,6 +99,10 @@ Register-ArgumentCompleter -Native -CommandName bookmark -ScriptBlock {
                     }
                     if ($usedOptions -contains '--browser') { $candidates = @($candidates | Where-Object { $_ -ne '--expand' }) }
                     if ($usedOptions -contains '--expand') { $candidates = @($candidates | Where-Object { $_ -notin '--browser', '--with', '--dry-run' }) }
+                }
+                if ($key -eq 'vault dedupe') {
+                    if ($usedOptions -contains '--check') { $candidates = @($candidates | Where-Object { $_ -ne '--apply' }) }
+                    if ($usedOptions -contains '--apply') { $candidates = @($candidates | Where-Object { $_ -ne '--check' }) }
                 }
             }
             if ($key -eq 'project note' -and $positionals.Count -eq 2 -and -not $prefix.StartsWith('-')) {

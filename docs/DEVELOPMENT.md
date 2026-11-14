@@ -122,7 +122,8 @@ synthetic data only.
   `save_history`.
 - Backfill new plugin metadata into legacy records.
 - Append sender and browser-capture events on duplicate saves; deduplicate event IDs.
-- Do not delete duplicates automatically; provide a preview-based command later.
+- Do not delete duplicates automatically during saves or migrations; use the
+  explicit `vault dedupe` preview-and-apply command.
 
 ## Schema migration rules
 
@@ -224,6 +225,7 @@ vault git-help [--full]
 vault open [--dry-run]
 vault tag-lint [--full] [--check]
 vault tag-fix --from TAG --to TAG [--apply]
+vault dedupe [--check] [--apply]
 save --url URL [--title TITLE] [--tags tag1,tag2] [--shared-by NAME] [--via CHANNEL]
 find [QUERY] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--expand] [--browser] [--with BROWSER] [--dry-run]
 open QUERY [--pick NUMBER] [--saved-within day|week|month|year] [--saved-since YYYY-MM-DD] [--fuzzy] [--with BROWSER] [--dry-run]
@@ -326,6 +328,17 @@ unrelated content and IDs, detect concurrent edits, and write each file
 atomically. Keep traversal, analysis, and maintenance in focused shared modules,
 not in `src/cli.js` or `src/vault.js`. No migration or Git operation belongs in
 this workflow.
+
+`vault dedupe` groups bookmarks by their normalized `canonical_url` (including
+site-plugin canonical URLs). For each duplicate group, it keeps the earliest-saved
+bookmark (by `first_saved_at`/`saved_at` and `save_history`, tie-breaking by
+relative vault path and ID) and merges tags, contexts, classification and
+relationship lists, site-plugin metadata, unknown fields, save/share/capture
+history, and distinct Markdown summary/notes from the duplicate records. It also
+remaps references to merged bookmark IDs in project tab sequences (`projects/`)
+and other bookmarks' relationship lists. It previews by default, supports
+`--check` to exit nonzero when duplicates exist, and writes/removes files
+atomically only when `--apply` is supplied.
 
 `find` prints compact, numbered terminal results containing title, short stable
 ID, URL, comma-separated tags, and optional fuzzy-match details. Results use
