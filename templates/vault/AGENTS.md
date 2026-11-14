@@ -152,6 +152,12 @@ direct recursive file inspection is equally valid.
 
 ## Safe editing workflow
 
+If `.markdown-bookmarks.lock` exists, do not edit records until the app's write
+operation finishes. Do not remove an aged lock without confirming all vault
+writers are stopped. Preserve any `.dedupe-*.tmp` files after a failure or crash:
+they may be the only recoverable originals. Copy and compare them with the
+current records before restoring or removing anything.
+
 1. Read this file, optional `AGENTS.local.md`, the vault `README.md`, and relevant
    existing records.
 2. Search for an existing record before creating one.

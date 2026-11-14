@@ -18,8 +18,7 @@ export class VaultLockError extends Error {
 
 export async function withVaultLock(root, callback, {
   timeoutMs = 5000,
-  retryMs = 15,
-  staleMs = 60000
+  retryMs = 15
 } = {}) {
   const resolvedRoot = path.resolve(root);
   const activeSet = heldLocks.getStore();
@@ -43,17 +42,10 @@ export async function withVaultLock(root, callback, {
         continue;
       }
       if (error.code !== 'EEXIST') throw error;
-      try {
-        const stat = await fs.stat(lockFile);
-        if (Date.now() - stat.mtimeMs > staleMs) {
-          await fs.rm(lockFile, { force: true });
-          continue;
-        }
-      } catch (statError) {
-        if (statError.code === 'ENOENT') continue;
-      }
+      // Age is not proof of abandonment (especially across host/container PIDs).
+      // Fail closed: only the owning token may release the lock automatically.
       if (Date.now() >= deadline) {
-        throw new VaultLockError(`Vault is locked by another operation: ${lockFile}`);
+        throw new VaultLockError(`Vault is locked: ${lockFile}. If an operation crashed, stop all vault writers before manually removing this lock.`);
       }
       await delay(retryMs);
     }

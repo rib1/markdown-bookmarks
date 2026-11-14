@@ -13,7 +13,7 @@ import {
 } from '../src/bookmark-dedupe.js';
 import { addProjectBookmark, createProject, projectBookmarks } from '../src/projects.js';
 import { initVault, saveBookmark } from '../src/vault.js';
-import { withVaultLock } from '../src/vault-lock.js';
+import { VAULT_LOCK_FILE, VaultLockError, withVaultLock } from '../src/vault-lock.js';
 import { inspectVaultStatus } from '../src/vault-status.js';
 
 async function writeRawBookmark(root, month, filename, content) {
@@ -23,6 +23,229 @@ async function writeRawBookmark(root, month, filename, content) {
   await fs.writeFile(file, content, 'utf8');
   return file;
 }
+
+async function safetyFixture() {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'bookmark-dedupe-recovery-'));
+  await initVault(root);
+  const files = [];
+  for (const [id, day] of [['keep', '01'], ['drop', '02']]) {
+    files.push(await writeRawBookmark(root, '09', `${id}.md`, [
+      '---', 'schema_version: 4', `id: "${id}"`, 'url: "https://example.test/recovery"',
+      'title: "Recovery fixture"', 'tags:', '  - "test"',
+      `saved_at: "2026-09-${day}T00:00:00.000Z"`, '---', '', `Original ${id} notes.`, ''
+    ].join('\n')));
+  }
+  return { root, keep: files[0], drop: files[1], plan: await createDedupePlan(root) };
+}
+
+test('vault lock never steals an aged live lock and keeps nested calls reentrant', async () => {
+  const { root } = await safetyFixture();
+  let release;
+  let ready;
+  const acquired = new Promise((resolve) => { ready = resolve; });
+  const gate = new Promise((resolve) => { release = resolve; });
+  const owner = withVaultLock(root, async () => {
+    await withVaultLock(root, async () => {});
+    ready();
+    await gate;
+  });
+  await acquired;
+  const lock = path.join(root, VAULT_LOCK_FILE);
+  const payload = await fs.readFile(lock, 'utf8');
+  const old = new Date(Date.now() - 120000);
+  await fs.utimes(lock, old, old);
+  try {
+    await assert.rejects(() => withVaultLock(root, async () => assert.fail('Live lock stolen'), {
+      timeoutMs: 30, retryMs: 2
+    }), (error) => error instanceof VaultLockError && /stop all vault writers/.test(error.message));
+    assert.equal(await fs.readFile(lock, 'utf8'), payload);
+  } finally {
+    release();
+    await owner;
+  }
+  await withVaultLock(root, async () => {});
+  await assert.rejects(() => fs.access(lock), { code: 'ENOENT' });
+});
+
+test('dedupe preserves recreated destinations and recovery originals instead of overwriting either', async () => {
+  const { root, keep, drop, plan } = await safetyFixture();
+  const original = await fs.readFile(keep, 'utf8');
+  const external = '---\nid: "keep"\n---\nNew external editor content.\n';
+  let injected = false;
+  let failure;
+  await assert.rejects(() => applyDedupePlan(plan, { fsOps: {
+    ...fs,
+    link: async (source, target) => {
+      if (!injected && source.includes('.dedupe-stage-')) {
+        injected = true;
+        await fs.writeFile(target, external, 'utf8');
+      }
+      return fs.link(source, target);
+    }
+  } }), (error) => {
+    failure = error;
+    return error instanceof BookmarkDedupeError && error.code === 'recovery_failed';
+  });
+  assert.equal(failure.cause.code, 'concurrent_change');
+  assert.equal(await fs.readFile(keep, 'utf8'), external);
+  assert.equal(await fs.readFile(failure.recoveryPaths[0], 'utf8'), original);
+  await fs.access(drop);
+  await assert.rejects(() => fs.access(path.join(root, VAULT_LOCK_FILE)), { code: 'ENOENT' });
+});
+
+test('dedupe keeps backups when a persistent I/O error also prevents rollback publication', async () => {
+  const { root, keep, drop, plan } = await safetyFixture();
+  const original = await fs.readFile(keep, 'utf8');
+  let failure;
+  await assert.rejects(() => applyDedupePlan(plan, { fsOps: {
+    ...fs,
+    link: async () => { throw Object.assign(new Error('Persistent I/O failure'), { code: 'EIO' }); }
+  } }), (error) => {
+    failure = error;
+    return error instanceof BookmarkDedupeError && error.code === 'recovery_failed';
+  });
+  assert.match(failure.message, /Preserve recovery files/);
+  assert.equal(failure.cause.code, 'EIO');
+  assert.equal(await fs.readFile(failure.recoveryPaths[0], 'utf8'), original);
+  await fs.access(drop);
+  await assert.rejects(() => fs.access(keep), { code: 'ENOENT' });
+  // A user can restore the reported original after resolving the I/O failure.
+  await fs.rename(failure.recoveryPaths[0], keep);
+  assert.equal((await dedupeVaultBookmarks(root, { apply: true })).applied, true);
+});
+
+test('dedupe retains originals when a recreated directory makes restoration impossible', async () => {
+  const { keep, drop, plan } = await safetyFixture();
+  const original = await fs.readFile(keep, 'utf8');
+  let injected = false;
+  let failure;
+  await assert.rejects(() => applyDedupePlan(plan, { fsOps: {
+    ...fs,
+    link: async (source, target) => {
+      if (!injected && source.includes('.dedupe-stage-')) {
+        injected = true;
+        await fs.mkdir(target);
+      }
+      return fs.link(source, target);
+    }
+  } }), (error) => {
+    failure = error;
+    return error instanceof BookmarkDedupeError && error.code === 'recovery_failed';
+  });
+  assert.equal((await fs.stat(keep)).isDirectory(), true);
+  assert.equal(await fs.readFile(failure.recoveryPaths[0], 'utf8'), original);
+  await fs.access(drop);
+});
+
+test('rollback reports only existing recovery files after failed or partial restore writes', async () => {
+  for (const partialWrite of [false, true]) {
+    const { keep, drop, plan } = await safetyFixture();
+    const original = await fs.readFile(keep, 'utf8');
+    let failure;
+    await assert.rejects(() => applyDedupePlan(plan, { fsOps: {
+      ...fs,
+      unlink: async () => {
+        await fs.appendFile(keep, '\nConcurrent append.\n');
+        throw new Error('Start rollback');
+      },
+      writeFile: async (file, ...args) => {
+        if (file.includes('.dedupe-restore-')) {
+          if (partialWrite) await fs.writeFile(file, 'partial recovery data', { flag: 'wx' });
+          throw Object.assign(new Error('Restore write failed'), { code: 'ENOSPC' });
+        }
+        return fs.writeFile(file, ...args);
+      }
+    } }), (error) => {
+      failure = error;
+      return error instanceof BookmarkDedupeError && error.code === 'recovery_failed';
+    });
+    assert.equal(failure.recoveryPaths.length, partialWrite ? 2 : 1);
+    for (const file of failure.recoveryPaths) await fs.access(file);
+    assert.equal(failure.recoveryPaths.some((file) => file.includes('.dedupe-conflict-')), false);
+    assert.equal(failure.recoveryPaths.some((file) => file.includes('.dedupe-restore-')), partialWrite);
+    assert.equal(await fs.readFile(failure.recoveryPaths[0], 'utf8'), original);
+    await fs.access(drop);
+    assert.match(await fs.readFile(keep, 'utf8'), /Concurrent append/);
+  }
+});
+
+test('rollback excludes already-deleted recovery files when backup cleanup fails', async () => {
+  for (const deleteBeforeThrow of [false, true]) {
+    const { root, keep, plan } = await safetyFixture();
+    const original = await fs.readFile(keep, 'utf8');
+    let failure;
+    await assert.rejects(() => applyDedupePlan(plan, { fsOps: {
+      ...fs,
+      unlink: async () => {
+        await fs.appendFile(keep, '\nConcurrent append.\n');
+        throw new Error('Start rollback');
+      },
+      rm: async (file, ...args) => {
+        if (file.startsWith(keep + '.dedupe-backup-')) {
+          if (deleteBeforeThrow) await fs.rm(file, ...args);
+          throw Object.assign(new Error('Backup cleanup failed'), { code: 'EIO' });
+        }
+        return fs.rm(file, ...args);
+      }
+    } }), (error) => {
+      failure = error;
+      return error instanceof BookmarkDedupeError && error.code === 'recovery_failed';
+    });
+    assert.equal(await fs.readFile(keep, 'utf8'), original + '\nConcurrent append.\n');
+    assert.equal(failure.recoveryPaths.length, deleteBeforeThrow ? 0 : 1);
+    assert.deepEqual(failure.unverifiedRecoveryPaths, []);
+    for (const file of failure.recoveryPaths) {
+      assert.match(file, /\.dedupe-backup-/);
+      await fs.access(file);
+    }
+    const files = await listAllFiles(root);
+    assert.equal(files.some((file) => /\.dedupe-(restore|conflict)-/.test(file)), false);
+    if (deleteBeforeThrow) assert.match(failure.message, /No retained recovery files could be confirmed/);
+  }
+});
+
+test('rollback reuses original backups for unmodified updates without restore writes', async () => {
+  const { root, keep, drop, plan } = await safetyFixture();
+  const before = new Map(await Promise.all([keep, drop].map(async (file) => [file, await fs.readFile(file, 'utf8')])));
+  let restoreWrites = 0;
+  const recoverySources = [];
+  await assert.rejects(() => applyDedupePlan(plan, { fsOps: {
+    ...fs,
+    unlink: async () => { throw new Error('Fail before original backup cleanup'); },
+    writeFile: async (file, ...args) => {
+      if (file.includes('.dedupe-restore-')) {
+        restoreWrites++;
+        throw Object.assign(new Error('Unnecessary restore write'), { code: 'ENOSPC' });
+      }
+      return fs.writeFile(file, ...args);
+    },
+    link: async (source, target) => {
+      if (target === keep && source.includes('.dedupe-backup-')) recoverySources.push(source);
+      return fs.link(source, target);
+    }
+  } }), (error) => error instanceof BookmarkDedupeError && error.code === 'write_failed');
+  assert.equal(restoreWrites, 0);
+  assert.equal(recoverySources.length, 1);
+  for (const [file, content] of before) assert.equal(await fs.readFile(file, 'utf8'), content);
+  assert.equal((await listAllFiles(root)).some((file) => file.includes('.dedupe-')), false);
+});
+
+test('recovery reporting separates unreadable candidates from confirmed recovery paths', async () => {
+  const { plan } = await safetyFixture();
+  let failure;
+  await assert.rejects(() => applyDedupePlan(plan, { fsOps: {
+    ...fs,
+    link: async () => { throw Object.assign(new Error('Persistent I/O failure'), { code: 'EIO' }); },
+    lstat: async () => { throw Object.assign(new Error('Cannot inspect backup'), { code: 'EACCES' }); }
+  } }), (error) => {
+    failure = error;
+    return error instanceof BookmarkDedupeError && error.code === 'recovery_failed';
+  });
+  assert.deepEqual(failure.recoveryPaths, []);
+  assert.equal(failure.unverifiedRecoveryPaths.length, 1);
+  await fs.access(failure.unverifiedRecoveryPaths[0]);
+  assert.match(failure.message, /Could not inspect recovery candidates/);
+});
 
 async function listAllFiles(directory) {
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -824,10 +1047,10 @@ saved_at: "2026-09-02T10:00:00.000Z"
     await Promise.all(initialFiles.map(async (file) => [file, await fs.readFile(file, 'utf8')]))
   );
 
-  // Count how many writeFile, rename, and unlink operations occur on a successful run
+  // Cover each forward operation; recovery uses the same injectable filesystem.
   // Expected: 3 updates (g1-keep, g2-keep, fault-proj) and 2 removals (g1-drop, g2-drop)
-  // writeFile: 3 calls; rename: 3 * 2 + 2 = 8 calls; unlink: 3 + 2 = 5 calls
-  for (const [opName, totalCalls] of [['writeFile', 3], ['rename', 8], ['unlink', 5]]) {
+  // writeFile: 3; backup rename: 5; exclusive publication link: 3; unlink: 5.
+  for (const [opName, totalCalls] of [['writeFile', 3], ['rename', 5], ['link', 3], ['unlink', 5]]) {
     for (let failAt = 1; failAt <= totalCalls; failAt++) {
       let count = 0;
       const plan = await createDedupePlan(root);

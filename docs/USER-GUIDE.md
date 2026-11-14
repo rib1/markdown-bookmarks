@@ -703,6 +703,21 @@ notes, and save/share/capture history, and updates any project references to
 point to the surviving bookmark ID. Review the resulting changes with Git before
 committing them.
 
+Vault writes use `.markdown-bookmarks.lock`. Locks never expire automatically:
+if a process crashes, stop all companion/CLI writers on every machine or
+container accessing this directory before manually removing the abandoned lock.
+Do not remove a lock just because an operation is slow.
+
+Dedupe refuses to overwrite a file recreated by an editor during replacement.
+It uses same-filesystem hard links for exclusive publication; filesystems that
+do not support them fail safely rather than falling back to overwriting files.
+If rollback cannot finish, the error lists retained `.dedupe-*.tmp` recovery
+paths. Stop vault writers, copy these files to a safe backup, and compare each
+original with its current Markdown file before restoring anything. Do not
+delete the recovery files until you have preserved both versions and verified
+the vault. A process crash can also leave these files behind; keep them for
+recovery rather than blindly rerunning dedupe or deleting temporary files.
+
 ## Check vault status
 
 Show bookmark, project, event, and unique-tag counts; schema and instruction

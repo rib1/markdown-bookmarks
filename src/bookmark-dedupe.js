@@ -19,16 +19,6 @@ import { formatProjectContent, validateProjectContent } from './project-format.j
 import { listBookmarkFiles, relativeVaultPath } from './vault-bookmark-files.js';
 import { withVaultLock } from './vault-lock.js';
 
-const nativeFs = {
-  readFile: fs.readFile.bind(fs),
-  writeFile: fs.writeFile.bind(fs),
-  rename: fs.rename.bind(fs),
-  unlink: fs.unlink.bind(fs),
-  rm: fs.rm.bind(fs),
-  stat: fs.stat.bind(fs),
-  readdir: fs.readdir.bind(fs)
-};
-
 const SCALAR_BACKFILL_FIELDS = [
   'site', 'repository', 'author', 'video_id', 'imgur_id',
   'space_key', 'page_id', 'issue_key', 'project_key', 'status', 'priority'
@@ -834,20 +824,22 @@ async function unchanged(record, fsOps = fs) {
   }
 }
 
+async function verifyVaultSnapshot(plan, expected, fsOps, message) {
+  const current = await snapshotVaultFiles(plan.root, fsOps);
+  for (const file of new Set([...expected.keys(), ...current.keys()])) {
+    if (!expected.has(file) || current.get(file)?.content !== expected.get(file)) {
+      throw dedupeError('concurrent_change', `${message}: ${file}`);
+    }
+  }
+}
+
+function snapshotContents(plan) {
+  return new Map([...plan.vaultSnapshot].map(([file, entry]) => [file, entry.content]));
+}
+
 async function verifyPreApplyState(plan, allUpdates, fsOps, phaseMessage) {
   if (plan.vaultSnapshot instanceof Map) {
-    const currentSnapshot = await snapshotVaultFiles(plan.root, fsOps);
-    for (const [file, snapshotEntry] of plan.vaultSnapshot.entries()) {
-      const current = currentSnapshot.get(file);
-      if (!current || current.content !== snapshotEntry.content) {
-        throw dedupeError('concurrent_change', `${phaseMessage}: ${file}`);
-      }
-    }
-    for (const file of currentSnapshot.keys()) {
-      if (!plan.vaultSnapshot.has(file)) {
-        throw dedupeError('concurrent_change', `${phaseMessage}: ${file}`);
-      }
-    }
+    await verifyVaultSnapshot(plan, snapshotContents(plan), fsOps, phaseMessage);
   }
   for (const item of [...allUpdates, ...plan.removals]) {
     if (!await unchanged(item, fsOps)) {
@@ -878,67 +870,117 @@ async function verifyPostApplyState(plan, allUpdates, fsOps) {
     }
   }
   if (plan.vaultSnapshot instanceof Map) {
-    const expected = new Map();
-    for (const [file, entry] of plan.vaultSnapshot.entries()) {
-      expected.set(file, entry.content);
-    }
+    const expected = snapshotContents(plan);
     for (const edit of allUpdates) {
       expected.set(edit.file, edit.content);
     }
     for (const removal of plan.removals) {
       expected.delete(removal.file);
     }
-    const currentSnapshot = await snapshotVaultFiles(plan.root, fsOps);
-    for (const [file, expectedContent] of expected.entries()) {
-      const current = currentSnapshot.get(file);
-      if (!current || current.content !== expectedContent) {
-        throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${file}`);
-      }
-    }
-    for (const file of currentSnapshot.keys()) {
-      if (!expected.has(file)) {
-        throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${file}`);
-      }
-    }
+    await verifyVaultSnapshot(plan, expected, fsOps, 'Vault file changed while applying dedupe');
   }
 }
 
-async function rollbackDedupeChanges(updatedBackups, removedBackups) {
-  for (const item of [...updatedBackups].reverse()) {
-    let currentOnDisk;
-    try {
-      currentOnDisk = await nativeFs.readFile(item.edit.absoluteFile, 'utf8');
-    } catch {
-      currentOnDisk = undefined;
-    }
-    let restored = item.backupContent;
-    if (currentOnDisk !== undefined && currentOnDisk !== item.edit.content && currentOnDisk !== item.backupContent) {
-      if (currentOnDisk.startsWith(item.edit.content)) {
-        restored = `${item.backupContent}${currentOnDisk.slice(item.edit.content.length)}`;
-      } else {
-        restored = currentOnDisk;
-      }
-    }
-    await nativeFs.writeFile(item.edit.absoluteFile, restored, 'utf8');
-    await nativeFs.rm(item.backupPath, { force: true });
+function transactionPath(file, purpose) {
+  return `${file}.dedupe-${purpose}-${process.pid}-${crypto.randomUUID()}.tmp`;
+}
+
+async function readOptionalFile(file, fsOps) {
+  try { return await fsOps.readFile(file, 'utf8'); } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    return undefined;
   }
-  for (const item of [...removedBackups].reverse()) {
-    let currentOnDisk;
+}
+
+async function backupRecord(record, backups, fsOps) {
+  const { mode } = await fsOps.stat(record.absoluteFile);
+  const backupPath = transactionPath(record.absoluteFile, 'backup');
+  await fsOps.rename(record.absoluteFile, backupPath);
+  // Track ownership immediately, including failures while reading the backup.
+  const item = { record, backupPath, mode, backupContent: record.originalContent, recoveryCandidates: new Set([backupPath]) };
+  backups.push(item);
+  item.backupContent = await fsOps.readFile(backupPath, 'utf8');
+  if (item.backupContent !== record.originalContent) {
+    throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${record.file}`);
+  }
+}
+
+async function restoreBackup(item, fsOps) {
+  const { record, backupPath, mode } = item;
+  // Cleanup may already have removed an earlier backup before a later failure.
+  let backupContent = await readOptionalFile(backupPath, fsOps);
+  if (backupContent === undefined) {
+    backupContent = item.backupContent;
+    await fsOps.writeFile(backupPath, backupContent, { encoding: 'utf8', flag: 'wx', mode });
+  }
+  const current = await readOptionalFile(record.absoluteFile, fsOps);
+  if (current === undefined) {
+    await fsOps.link(backupPath, record.absoluteFile);
+  } else if (current !== backupContent) {
+    let restored;
+    if (record.content !== undefined && current.startsWith(record.content)) {
+      restored = backupContent + current.slice(record.content.length);
+    } else if (record.content === undefined && !normalizeLineEndings(current).startsWith('---\n')) {
+      restored = backupContent + current;
+    } else {
+      throw new Error(`Concurrent contents preserved at ${record.absoluteFile}`);
+    }
+    let temporary;
+    let restoreSource = backupPath;
+    if (restored !== backupContent) {
+      temporary = transactionPath(record.absoluteFile, 'restore');
+      // A failed write can still leave a partial file. Track candidates before
+      // attempting I/O, and confirm their existence when reporting a failure.
+      item.recoveryCandidates.add(temporary);
+      await fsOps.writeFile(temporary, restored, { encoding: 'utf8', flag: 'wx', mode });
+      restoreSource = temporary;
+    }
+    const displaced = transactionPath(record.absoluteFile, 'conflict');
+    item.recoveryCandidates.add(displaced);
+    await fsOps.rename(record.absoluteFile, displaced);
+    if (await fsOps.readFile(displaced, 'utf8') !== current) {
+      // An external writer changed the file during recovery. Do not discard it.
+      await fsOps.link(displaced, record.absoluteFile);
+      throw new Error(`Concurrent contents preserved at ${displaced}`);
+    }
+    await fsOps.link(restoreSource, record.absoluteFile);
+    if (temporary) await fsOps.rm(temporary, { force: true });
+    await fsOps.rm(displaced, { force: true });
+  }
+  await fsOps.rm(backupPath, { force: true });
+}
+
+async function inspectRecoveryFiles(failures, fsOps) {
+  const paths = [];
+  const unverified = [];
+  const candidates = new Set(failures.flatMap(({ item }) => [...item.recoveryCandidates]));
+  for (const file of candidates) {
     try {
-      currentOnDisk = await nativeFs.readFile(item.removal.absoluteFile, 'utf8');
-    } catch {
-      currentOnDisk = undefined;
+      await fsOps.lstat(file);
+      paths.push(file);
+    } catch (error) {
+      if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') unverified.push(file);
     }
-    let restored = item.backupContent;
-    if (currentOnDisk !== undefined && currentOnDisk !== item.backupContent) {
-      if (!currentOnDisk.startsWith('---\n')) {
-        restored = `${item.backupContent}${currentOnDisk}`;
-      } else {
-        restored = currentOnDisk;
-      }
+  }
+  return { paths, unverified };
+}
+
+async function rollbackDedupeChanges(backups, fsOps) {
+  const failures = [];
+  // Try every record even if one destination remains unwritable.
+  for (const item of [...backups].reverse()) {
+    try { await restoreBackup(item, fsOps); } catch (error) {
+      failures.push({ item, error });
     }
-    await nativeFs.writeFile(item.removal.absoluteFile, restored, 'utf8');
-    await nativeFs.rm(item.backupPath, { force: true });
+  }
+  if (failures.length) {
+    const { paths, unverified } = await inspectRecoveryFiles(failures, fsOps);
+    const retained = paths.length ? `Preserve recovery files: ${paths.join(', ')}.` : 'No retained recovery files could be confirmed.';
+    const unknown = unverified.length ? ` Could not inspect recovery candidates: ${unverified.join(', ')}.` : '';
+    const error = dedupeError('recovery_failed', `Dedupe rollback incomplete. ${retained}${unknown} ${failures.map(({ error }) => error.message).join('; ')}`);
+    error.recoveryPaths = paths;
+    error.unverifiedRecoveryPaths = unverified;
+    throw error;
   }
 }
 
@@ -955,47 +997,42 @@ export async function applyDedupePlan(plan, { fsOps = fs, lockTimeoutMs } = {}) 
     await verifyPreApplyState(plan, allUpdates, fsOps, 'Vault file changed after preview');
 
     const staged = [];
-    const updatedBackups = [];
-    const removedBackups = [];
+    const backups = [];
     const changed = [];
     const removed = [];
     try {
       for (const edit of allUpdates) {
-        const temporary = `${edit.absoluteFile}.dedupe-stage-${process.pid}-${crypto.randomUUID()}.tmp`;
+        const temporary = transactionPath(edit.absoluteFile, 'stage');
         const { mode } = await fsOps.stat(edit.absoluteFile);
-        await fsOps.writeFile(temporary, edit.content, { encoding: 'utf8', flag: 'wx', mode });
         staged.push({ edit, temporary });
+        await fsOps.writeFile(temporary, edit.content, { encoding: 'utf8', flag: 'wx', mode });
       }
 
       await verifyPreApplyState(plan, allUpdates, fsOps, 'Vault file changed while applying dedupe');
 
       for (const item of staged) {
-        const backupPath = `${item.edit.absoluteFile}.dedupe-backup-${process.pid}-${crypto.randomUUID()}.tmp`;
-        await fsOps.rename(item.edit.absoluteFile, backupPath);
-        const backupContent = await nativeFs.readFile(backupPath, 'utf8');
-        updatedBackups.push({ edit: item.edit, backupPath, backupContent });
-        if (backupContent !== item.edit.originalContent) {
-          throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${item.edit.file}`);
+        await backupRecord(item.edit, backups, fsOps);
+        try {
+          // Hard-link publication is atomic and fails if an editor recreated the
+          // destination. Rename would silently overwrite that editor's file.
+          await fsOps.link(item.temporary, item.edit.absoluteFile);
+        } catch (error) {
+          if (error.code === 'EEXIST') {
+            throw dedupeError('concurrent_change', `Vault file recreated while applying dedupe: ${item.edit.file}`);
+          }
+          throw error;
         }
-        await fsOps.rename(item.temporary, item.edit.absoluteFile);
-        item.temporary = undefined;
         changed.push(item.edit.file);
       }
 
       for (const removal of plan.removals) {
-        const backupPath = `${removal.absoluteFile}.dedupe-removed-${process.pid}-${crypto.randomUUID()}.tmp`;
-        await fsOps.rename(removal.absoluteFile, backupPath);
-        const backupContent = await nativeFs.readFile(backupPath, 'utf8');
-        removedBackups.push({ removal, backupPath, backupContent });
-        if (backupContent !== removal.originalContent) {
-          throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${removal.file}`);
-        }
+        await backupRecord(removal, backups, fsOps);
         removed.push(removal.file);
       }
 
       await verifyPostApplyState(plan, allUpdates, fsOps);
 
-      for (const item of [...updatedBackups, ...removedBackups]) {
+      for (const item of backups) {
         await fsOps.unlink(item.backupPath);
       }
 
@@ -1003,17 +1040,17 @@ export async function applyDedupePlan(plan, { fsOps = fs, lockTimeoutMs } = {}) 
 
       return { changed, removed };
     } catch (error) {
-      await rollbackDedupeChanges(updatedBackups, removedBackups);
+      try { await rollbackDedupeChanges(backups, fsOps); } catch (recoveryError) {
+        recoveryError.cause = error;
+        throw recoveryError;
+      }
       if (error instanceof BookmarkDedupeError) {
         throw error;
       }
       throw dedupeError('write_failed', `Could not apply bookmark deduplication: ${error.message}`);
     } finally {
-      await Promise.all([
-        ...staged.filter((item) => item.temporary).map((item) => nativeFs.rm(item.temporary, { force: true })),
-        ...updatedBackups.map((item) => nativeFs.rm(item.backupPath, { force: true })),
-        ...removedBackups.map((item) => nativeFs.rm(item.backupPath, { force: true }))
-      ]);
+      // Never delete recovery originals here: rollback may itself have failed.
+      await Promise.allSettled(staged.map((item) => fsOps.rm(item.temporary, { force: true })));
     }
   }, { timeoutMs: lockTimeoutMs });
 }
