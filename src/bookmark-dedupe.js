@@ -7,6 +7,7 @@ import {
   normalizeUrl,
   readList,
   readScalar,
+  removeScalar,
   replaceList,
   replaceScalar
 } from './bookmark-format.js';
@@ -16,6 +17,17 @@ import { appendShareEvent } from './share-history.js';
 import { appendCaptureEvent } from './capture-history.js';
 import { formatProjectContent, validateProjectContent } from './project-format.js';
 import { listBookmarkFiles, relativeVaultPath } from './vault-bookmark-files.js';
+import { withVaultLock } from './vault-lock.js';
+
+const nativeFs = {
+  readFile: fs.readFile.bind(fs),
+  writeFile: fs.writeFile.bind(fs),
+  rename: fs.rename.bind(fs),
+  unlink: fs.unlink.bind(fs),
+  rm: fs.rm.bind(fs),
+  stat: fs.stat.bind(fs),
+  readdir: fs.readdir.bind(fs)
+};
 
 const SCALAR_BACKFILL_FIELDS = [
   'site', 'repository', 'author', 'video_id', 'imgur_id',
@@ -44,6 +56,54 @@ function dedupeError(code, message) {
   return new BookmarkDedupeError(code, message);
 }
 
+function validateFrontmatterSyntax(metadata, file) {
+  const lines = metadata.split('\n');
+  if (lines[lines.length - 1] === '') lines.pop();
+  for (const line of lines) {
+    if (!line.trim() || /^[ \t]*#/.test(line)) continue;
+    const headerMatch = line.match(/^([A-Za-z_][\w-]*):[ \t]*(.*)$/);
+    if (headerMatch) {
+      const [, field, rawValue] = headerMatch;
+      const trimmed = rawValue.trim();
+      if (trimmed.startsWith('"') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          JSON.parse(trimmed);
+        } catch {
+          throw dedupeError('invalid_frontmatter', `Invalid bookmark frontmatter value for "${field}" in ${file}`);
+        }
+      }
+      continue;
+    }
+    const listMatch = line.match(/^ {2}- (.*)$/);
+    if (listMatch) {
+      const trimmed = listMatch[1].trim();
+      if (trimmed.startsWith('"') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          JSON.parse(trimmed);
+        } catch {
+          throw dedupeError('invalid_frontmatter', `Invalid bookmark frontmatter list item in ${file}`);
+        }
+      }
+      continue;
+    }
+    if (/^ {2,}\[\][ \t]*$/.test(line)) continue;
+    const nestedKeyMatch = line.match(/^ {2,}([A-Za-z_][\w-]*):[ \t]*(.*)$/);
+    if (nestedKeyMatch) {
+      const [, nestedField, rawValue] = nestedKeyMatch;
+      const trimmed = rawValue.trim();
+      if (trimmed.startsWith('"') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          JSON.parse(trimmed);
+        } catch {
+          throw dedupeError('invalid_frontmatter', `Invalid nested frontmatter value for "${nestedField}" in ${file}`);
+        }
+      }
+      continue;
+    }
+    throw dedupeError('invalid_frontmatter', `Invalid bookmark frontmatter line in ${file}: ${line}`);
+  }
+}
+
 function parseBookmarkParts(content, file) {
   const normalized = normalizeLineEndings(content);
   const match = normalized.match(/^---\n([\s\S]*?)^---(?:\n|$)/m);
@@ -51,6 +111,7 @@ function parseBookmarkParts(content, file) {
     throw dedupeError('invalid_frontmatter', `Invalid bookmark frontmatter in ${file}: opening and closing --- delimiters are required`);
   }
   const metadata = match[1];
+  validateFrontmatterSyntax(metadata, file);
   const headers = [...metadata.matchAll(/^([A-Za-z_][\w-]*):[^\n]*(?:\n|$)/gm)];
   const fields = new Map();
   for (let index = 0; index < headers.length; index++) {
@@ -116,31 +177,45 @@ function earliestSaveMs(frontmatter, file) {
   return Math.min(...candidates);
 }
 
-async function readBookmarkRecords(root) {
+export function validateBookmarkContent(content, file) {
+  const parts = parseBookmarkParts(content, file);
+  const rawId = readScalar(parts.frontmatter, 'id');
+  if (rawId === undefined || String(rawId).trim() === '') {
+    throw dedupeError('missing_id', `Bookmark is missing an ID: ${file}`);
+  }
+  const rawUrl = readScalar(parts.frontmatter, 'url');
+  if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
+    throw dedupeError('invalid_url', `Bookmark is missing a URL: ${file}`);
+  }
+  earliestSaveMs(parts.frontmatter, file);
+  const rawSaveCount = readScalar(parts.frontmatter, 'save_count');
+  if (rawSaveCount !== undefined && (!Number.isInteger(Number(rawSaveCount)) || Number(rawSaveCount) < 1)) {
+    throw dedupeError('invalid_frontmatter', `Bookmark has an invalid save_count in ${file}: ${rawSaveCount}`);
+  }
+  let migratedFrontmatter;
+  try {
+    migratedFrontmatter = migrateBookmarkContent(parts.frontmatter).content;
+  } catch (error) {
+    throw dedupeError('invalid_frontmatter', `Invalid bookmark metadata in ${file}: ${error.message}`);
+  }
+  const canonicalUrl = resolveCanonicalUrl(rawUrl.trim(), readScalar(migratedFrontmatter, 'canonical_url'), file);
+  return {
+    parts,
+    id: String(rawId).trim(),
+    url: rawUrl.trim(),
+    canonicalUrl,
+    migratedFrontmatter
+  };
+}
+
+async function readBookmarkRecords(root, fsOps = fs) {
   const records = [];
   const byId = new Map();
   for (const absoluteFile of await listBookmarkFiles(root)) {
     const file = relativeVaultPath(root, absoluteFile);
-    const content = await fs.readFile(absoluteFile, 'utf8');
-    const parts = parseBookmarkParts(content, file);
-    const rawId = readScalar(parts.frontmatter, 'id');
-    if (rawId === undefined || String(rawId).trim() === '') {
-      throw dedupeError('missing_id', `Bookmark is missing an ID: ${file}`);
-    }
-    const id = String(rawId).trim();
-    const rawUrl = readScalar(parts.frontmatter, 'url');
-    if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
-      throw dedupeError('invalid_url', `Bookmark is missing a URL: ${file}`);
-    }
-    const url = rawUrl.trim();
+    const content = await fsOps.readFile(absoluteFile, 'utf8');
+    const { parts, id, url, canonicalUrl, migratedFrontmatter } = validateBookmarkContent(content, file);
     const earliestMs = earliestSaveMs(parts.frontmatter, file);
-    let migratedFrontmatter;
-    try {
-      migratedFrontmatter = migrateBookmarkContent(parts.frontmatter).content;
-    } catch (error) {
-      throw dedupeError('invalid_frontmatter', `Invalid bookmark metadata in ${file}: ${error.message}`);
-    }
-    const canonicalUrl = resolveCanonicalUrl(url, readScalar(migratedFrontmatter, 'canonical_url'), file);
     const existingIdRecord = byId.get(id);
     if (existingIdRecord && existingIdRecord.canonicalUrl !== canonicalUrl) {
       throw dedupeError('duplicate_id', `Multiple bookmarks with different URLs share ID ${id}: ${existingIdRecord.file}, ${file}`);
@@ -231,17 +306,35 @@ function mergeSaveHistory(group) {
   };
 }
 
+function sameEventObject(left, right) {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    if (JSON.stringify(left[key]) !== JSON.stringify(right[key])) return false;
+  }
+  return true;
+}
+
 function mergeEventHistory(group, field, appendEvent, errorCode) {
   let merged = [];
   for (const record of group) {
     for (const entry of readList(record.frontmatter, field)) {
-      if (entry && typeof entry === 'object' && entry.id) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw dedupeError(errorCode, `Invalid ${field} entry in ${record.file}`);
+      }
+      if (entry.id !== undefined && entry.id !== null && String(entry.id).trim() !== '') {
+        const existing = merged.find((item) => item && typeof item === 'object' && item.id === entry.id);
         try {
           merged = appendEvent(merged, entry).history;
         } catch (error) {
           throw dedupeError(errorCode, `Cannot merge ${field} in ${record.file}: ${error.message}`);
         }
-      } else if (entry !== undefined && entry !== null) {
+        if (existing && !sameEventObject(existing, entry)) {
+          throw dedupeError(
+            errorCode,
+            `Cannot merge ${field} in ${record.file}: event ${entry.id} has conflicting provenance metadata`
+          );
+        }
+      } else {
         const serialized = JSON.stringify(entry);
         if (!merged.some((existing) => JSON.stringify(existing) === serialized)) merged.push(entry);
       }
@@ -264,26 +357,36 @@ function mergeUnknownFields(frontmatter, group) {
     for (const [field, block] of duplicate.fields.entries()) {
       if (KNOWN_BOOKMARK_FIELDS.has(field)) continue;
       if (!mergedFields.has(field)) {
-        frontmatter = frontmatter.replace(/\n---\n$/, `\n${block.endsWith('\n') ? block : `${block}\n`}---\n`);
+        const normalizedBlock = block.endsWith('\n') ? block : `${block}\n`;
+        frontmatter = frontmatter.replace(/\n---\n$/, () => `\n${normalizedBlock}---\n`);
         mergedFields.set(field, block);
         continue;
       }
       if (mergedFields.get(field).trim() === block.trim()) continue;
-      const keepList = readList(frontmatter, field);
-      const duplicateList = readList(duplicate.frontmatter, field);
-      if (keepList.length || duplicateList.length) {
-        const combined = [...keepList];
-        for (const item of duplicateList) {
-          if (!combined.some((existing) => JSON.stringify(existing) === JSON.stringify(item))) combined.push(item);
-        }
-        frontmatter = replaceList(frontmatter, field, combined);
-        mergedFields.set(field, parseBookmarkParts(frontmatter, keep.file).fields.get(field));
-        continue;
-      }
       throw dedupeError('conflicting_metadata', `Conflicting metadata field "${field}" between ${keep.file} and ${duplicate.file}`);
     }
   }
   return frontmatter;
+}
+
+function selectPublishedEvidenceRecord(group) {
+  const recordsWithDate = group.filter((record) => {
+    const value = readScalar(record.frontmatter, 'published_at');
+    return value !== undefined && String(value).trim() !== '';
+  });
+  if (!recordsWithDate.length) return undefined;
+  const primary = recordsWithDate[0];
+  const primaryDate = String(readScalar(primary.frontmatter, 'published_at')).trim();
+  const hasProvenance = (record) => {
+    const source = readScalar(record.frontmatter, 'published_at_source');
+    const confidence = readScalar(record.frontmatter, 'published_at_confidence');
+    return (source !== undefined && String(source).trim() !== '')
+      || (confidence !== undefined && String(confidence).trim() !== '');
+  };
+  if (hasProvenance(primary)) return primary;
+  const sameDateWithProvenance = recordsWithDate.find((record) =>
+    String(readScalar(record.frontmatter, 'published_at')).trim() === primaryDate && hasProvenance(record));
+  return sameDateWithProvenance || primary;
 }
 
 function mergeDuplicateGroup(group, canonicalUrl, removedIdMap, linkedProjectsByBookmarkId) {
@@ -334,23 +437,21 @@ function mergeDuplicateGroup(group, canonicalUrl, removedIdMap, linkedProjectsBy
     }
   }
 
-  const publishedRecord = group.find((record) => {
-    const value = readScalar(record.frontmatter, 'published_at');
-    return value !== undefined && String(value).trim() !== '';
-  });
+  const publishedRecord = selectPublishedEvidenceRecord(group);
   if (publishedRecord) {
     const publishedAt = readScalar(publishedRecord.frontmatter, 'published_at');
     frontmatter = replaceScalar(frontmatter, 'published_at', publishedAt);
     for (const field of ['published_at_source', 'published_at_confidence']) {
-      const value = readScalar(frontmatter, field)
-        || group.find((record) => readScalar(record.frontmatter, 'published_at') === publishedAt && readScalar(record.frontmatter, field))
-          && readScalar(
-            group.find((record) => readScalar(record.frontmatter, 'published_at') === publishedAt && readScalar(record.frontmatter, field)).frontmatter,
-            field
-          );
+      const value = readScalar(publishedRecord.frontmatter, field);
       if (value !== undefined && String(value).trim() !== '') {
         frontmatter = replaceScalar(frontmatter, field, value);
+      } else {
+        frontmatter = removeScalar(frontmatter, field);
       }
+    }
+  } else {
+    for (const field of ['published_at', 'published_at_source', 'published_at_confidence']) {
+      frontmatter = removeScalar(frontmatter, field);
     }
   }
 
@@ -395,8 +496,10 @@ function mergeDuplicateGroup(group, canonicalUrl, removedIdMap, linkedProjectsBy
   frontmatter = replaceScalar(frontmatter, 'schema_version', BOOKMARK_SCHEMA_VERSION);
 
   const { body, notesMerged } = mergeBodies(group);
+  const mergedContent = `${frontmatter}${body}`;
+  validateBookmarkContent(mergedContent, keep.file);
   return {
-    content: `${frontmatter}${body}`,
+    content: mergedContent,
     mergedTags,
     mergedContexts,
     saveCount: saveStats.saveCount,
@@ -404,70 +507,176 @@ function mergeDuplicateGroup(group, canonicalUrl, removedIdMap, linkedProjectsBy
   };
 }
 
-async function listProjectFiles(root) {
-  const directory = path.join(root, 'projects');
+async function listMarkdownFilesInDir(directory, fsOps = fs) {
   try {
-    const entries = await fs.readdir(directory, { withFileTypes: true });
-    return entries.filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
-      .map((entry) => path.join(directory, entry.name))
-      .sort((left, right) => left.localeCompare(right, 'en'));
+    const entries = await fsOps.readdir(directory, { withFileTypes: true });
+    const files = [];
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...await listMarkdownFilesInDir(fullPath, fsOps));
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        files.push(fullPath);
+      }
+    }
+    return files.sort((left, right) => left.localeCompare(right, 'en'));
   } catch (error) {
     if (error.code === 'ENOENT') return [];
     throw error;
   }
 }
 
-function normalizeProjectBookmarkEntry(rawEntry) {
-  if (typeof rawEntry === 'string') return { id: rawEntry, notes: [] };
-  if (!rawEntry || typeof rawEntry !== 'object' || Array.isArray(rawEntry)) return rawEntry;
-  const { note, notes: storedNotes, ...rest } = rawEntry;
-  const notes = Array.isArray(storedNotes)
-    ? storedNotes.map(String).map((item) => item.trim()).filter(Boolean)
-    : typeof note === 'string' && note.trim() ? [note.trim()] : [];
-  return { ...rest, notes };
+async function listProjectFiles(root, fsOps = fs) {
+  return listMarkdownFilesInDir(path.join(root, 'projects'), fsOps);
 }
 
-async function planProjectEdits(root, removedIdMap) {
+async function snapshotVaultFiles(root, fsOps = fs) {
+  const snapshot = new Map();
+  for (const folder of ['bookmarks', 'projects', 'events']) {
+    const files = await listMarkdownFilesInDir(path.join(root, folder), fsOps);
+    for (const absoluteFile of files) {
+      const rel = relativeVaultPath(root, absoluteFile);
+      const content = await fsOps.readFile(absoluteFile, 'utf8');
+      snapshot.set(rel, { absoluteFile, content });
+    }
+  }
+  return snapshot;
+}
+
+function parseAndValidateProjectBookmarkEntries(content, file) {
+  try {
+    validateProjectContent(content, file);
+  } catch (error) {
+    throw dedupeError('invalid_project', error.message);
+  }
+  const normalized = normalizeLineEndings(content);
+  const frontmatterMatch = normalized.match(/^---\n([\s\S]*?)^---(?:\n|$)/m);
+  const metadata = frontmatterMatch[1];
+  const headers = [...metadata.matchAll(/^([A-Za-z_][\w-]*):[^\n]*(?:\n|$)/gm)];
+  let bookmarksBlock = '';
+  for (let index = 0; index < headers.length; index++) {
+    if (headers[index][1] === 'bookmarks') {
+      const end = headers[index + 1]?.index ?? metadata.length;
+      bookmarksBlock = metadata.slice(headers[index].index, end);
+      break;
+    }
+  }
+  if (!bookmarksBlock) return [];
+  const lines = bookmarksBlock.split('\n').slice(1);
+  if (lines[lines.length - 1] === '') lines.pop();
+  const entries = [];
+  for (const line of lines) {
+    if (!line.trim() || /^[ \t]*#/.test(line) || /^ {2}\[\][ \t]*$/.test(line)) continue;
+    const itemMatch = line.match(/^ {2}- (.*)$/);
+    if (!itemMatch) {
+      throw dedupeError('invalid_project', `Invalid bookmark entry line in ${file}: ${line}`);
+    }
+    const rawItem = itemMatch[1].trim();
+    if (!rawItem) {
+      throw dedupeError('invalid_project', `Empty bookmark entry in ${file}`);
+    }
+    let parsed;
+    if (rawItem.startsWith('{') || rawItem.startsWith('[') || rawItem.startsWith('"')) {
+      try {
+        parsed = JSON.parse(rawItem);
+      } catch {
+        throw dedupeError('invalid_project', `Malformed bookmark entry in ${file}: ${rawItem}`);
+      }
+    } else if (/[:{}[\]"]/.test(rawItem)) {
+      throw dedupeError('invalid_project', `Malformed bookmark entry in ${file}: ${rawItem}`);
+    } else {
+      parsed = rawItem;
+    }
+    if (typeof parsed === 'string') {
+      const id = parsed.trim();
+      if (!id) throw dedupeError('invalid_project', `Bookmark entry in ${file} has an empty id`);
+      entries.push({ id, notes: [] });
+      continue;
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw dedupeError('invalid_project', `Malformed bookmark entry in ${file}: ${rawItem}`);
+    }
+    if (typeof parsed.id !== 'string' || !parsed.id.trim()) {
+      throw dedupeError('invalid_project', `Bookmark entry in ${file} is missing a valid string id`);
+    }
+    if (parsed.note !== undefined && typeof parsed.note !== 'string') {
+      throw dedupeError('invalid_project', `Bookmark entry for ${parsed.id} in ${file} has an invalid note`);
+    }
+    if (parsed.notes !== undefined && (!Array.isArray(parsed.notes) || parsed.notes.some((item) => typeof item !== 'string'))) {
+      throw dedupeError('invalid_project', `Bookmark entry for ${parsed.id} in ${file} has an invalid notes list`);
+    }
+    const { id, note, notes: storedNotes, ...rest } = parsed;
+    const combinedNotes = uniqueStrings([
+      ...(Array.isArray(storedNotes) ? storedNotes : []),
+      ...(typeof note === 'string' ? [note] : [])
+    ]);
+    entries.push({ ...rest, id: id.trim(), notes: combinedNotes });
+  }
+  return entries;
+}
+
+function mergeProjectBookmarkEntries(existing, incoming, targetId, file) {
+  const merged = { ...existing };
+  for (const [key, value] of Object.entries(incoming)) {
+    if (key === 'id' || key === 'notes') continue;
+    if (merged[key] === undefined) {
+      merged[key] = value;
+      continue;
+    }
+    if (JSON.stringify(merged[key]) !== JSON.stringify(value)) {
+      throw dedupeError('invalid_project', `Conflicting project bookmark entry field "${key}" for ${targetId} in ${file}`);
+    }
+  }
+  merged.id = targetId;
+  merged.notes = uniqueStrings([...(existing.notes || []), ...(incoming.notes || [])]);
+  return merged;
+}
+
+async function planProjectEdits(root, removedIdMap, fsOps = fs) {
   const projectEdits = [];
   const linkedProjectsByBookmarkId = new Map();
-  if (!removedIdMap.size) return { projectEdits, linkedProjectsByBookmarkId };
 
-  for (const absoluteFile of await listProjectFiles(root)) {
+  for (const absoluteFile of await listProjectFiles(root, fsOps)) {
     const file = relativeVaultPath(root, absoluteFile);
-    const content = await fs.readFile(absoluteFile, 'utf8');
-    const rawEntries = readList(content, 'bookmarks').map(normalizeProjectBookmarkEntry)
-      .filter((entry) => entry && typeof entry.id === 'string');
-    if (!rawEntries.some((entry) => removedIdMap.has(entry.id))) continue;
+    const content = await fsOps.readFile(absoluteFile, 'utf8');
+    const rawEntries = parseAndValidateProjectBookmarkEntries(content, file);
+    const rawProjectId = readScalar(content, 'id');
+    const projectId = rawProjectId !== undefined && String(rawProjectId).trim() !== '' ? String(rawProjectId).trim() : undefined;
 
-    try {
-      validateProjectContent(content, file);
-    } catch (error) {
-      throw dedupeError('invalid_project', error.message);
-    }
-    const projectId = readScalar(content, 'id');
-    const rewritten = [];
-    const indexById = new Map();
+    let touchesRemoved = false;
+    let hasDuplicateTargetInProject = false;
+    const seenTargets = new Set();
     for (const entry of rawEntries) {
       const targetId = removedIdMap.get(entry.id) || entry.id;
-      if (projectId && removedIdMap.has(entry.id)) {
+      if (removedIdMap.has(entry.id)) touchesRemoved = true;
+      if (seenTargets.has(targetId)) hasDuplicateTargetInProject = true;
+      seenTargets.add(targetId);
+      if (projectId) {
         const list = linkedProjectsByBookmarkId.get(targetId) || [];
         if (!list.includes(projectId)) list.push(projectId);
         linkedProjectsByBookmarkId.set(targetId, list);
       }
+    }
+
+    if (!touchesRemoved && !hasDuplicateTargetInProject) continue;
+
+    const rewritten = [];
+    const indexById = new Map();
+    for (const entry of rawEntries) {
+      const targetId = removedIdMap.get(entry.id) || entry.id;
       if (indexById.has(targetId)) {
         const existingIndex = indexById.get(targetId);
-        const existing = rewritten[existingIndex];
-        const mergedNotes = uniqueStrings([...existing.notes, ...entry.notes]);
-        rewritten[existingIndex] = { ...entry, ...existing, id: targetId, notes: mergedNotes };
+        rewritten[existingIndex] = mergeProjectBookmarkEntries(rewritten[existingIndex], entry, targetId, file);
       } else {
         indexById.set(targetId, rewritten.length);
         rewritten.push({ ...entry, id: targetId });
       }
     }
     const updatedContent = formatProjectContent(content, { bookmarks: rewritten, file });
+    parseAndValidateProjectBookmarkEntries(updatedContent, file);
     if (updatedContent !== content) {
       projectEdits.push({
-        id: projectId ? String(projectId) : file,
+        id: projectId || file,
         file,
         absoluteFile,
         originalContent: content,
@@ -502,20 +711,23 @@ function planExternalBookmarkRelationshipEdits(singleRecords, removedIdMap, link
       changed = true;
     }
     if (changed) {
+      const updatedContent = `${frontmatter}${normalizeLineEndings(record.body)}`;
+      validateBookmarkContent(updatedContent, record.file);
       edits.push({
         id: record.id,
         file: record.file,
         absoluteFile: record.absoluteFile,
         originalContent: record.originalContent,
-        content: `${frontmatter}${normalizeLineEndings(record.body)}`
+        content: updatedContent
       });
     }
   }
   return edits;
 }
 
-export async function createDedupePlan(root) {
-  const records = await readBookmarkRecords(root);
+export async function createDedupePlan(root, { fsOps = fs } = {}) {
+  const vaultSnapshot = await snapshotVaultFiles(root, fsOps);
+  const records = await readBookmarkRecords(root, fsOps);
   const byCanonicalUrl = new Map();
   for (const record of records) {
     const list = byCanonicalUrl.get(record.canonicalUrl) || [];
@@ -528,13 +740,15 @@ export async function createDedupePlan(root) {
     .sort(([leftUrl], [rightUrl]) => leftUrl.localeCompare(rightUrl, 'en'));
 
   if (!duplicateEntries.length) {
+    await planProjectEdits(root, new Map(), fsOps);
     return {
       root,
       bookmarkCount: records.length,
       groups: [],
       bookmarkEdits: [],
       projectEdits: [],
-      removals: []
+      removals: [],
+      vaultSnapshot
     };
   }
 
@@ -551,7 +765,7 @@ export async function createDedupePlan(root) {
     return { canonicalUrl, ordered };
   });
 
-  const { projectEdits, linkedProjectsByBookmarkId } = await planProjectEdits(root, removedIdMap);
+  const { projectEdits, linkedProjectsByBookmarkId } = await planProjectEdits(root, removedIdMap, fsOps);
 
   const groups = [];
   const bookmarkEdits = [];
@@ -607,71 +821,212 @@ export async function createDedupePlan(root) {
     groups,
     bookmarkEdits,
     projectEdits,
-    removals
+    removals,
+    vaultSnapshot
   };
 }
 
-async function unchanged(record) {
+async function unchanged(record, fsOps = fs) {
   try {
-    return await fs.readFile(record.absoluteFile, 'utf8') === record.originalContent;
+    return await fsOps.readFile(record.absoluteFile, 'utf8') === record.originalContent;
   } catch {
     return false;
   }
 }
 
-export async function applyDedupePlan(plan) {
-  const allUpdates = [...plan.bookmarkEdits, ...plan.projectEdits];
-  for (const item of [...allUpdates, ...plan.removals]) {
-    if (!await unchanged(item)) {
-      throw dedupeError('concurrent_change', `Vault file changed after preview: ${item.file}`);
-    }
-  }
-
-  const staged = [];
-  const changed = [];
-  const removed = [];
-  try {
-    for (const edit of allUpdates) {
-      const temporary = `${edit.absoluteFile}.dedupe-${process.pid}-${crypto.randomUUID()}.tmp`;
-      const { mode } = await fs.stat(edit.absoluteFile);
-      await fs.writeFile(temporary, edit.content, { encoding: 'utf8', flag: 'wx', mode });
-      staged.push({ edit, temporary });
-    }
-    for (const item of [...allUpdates, ...plan.removals]) {
-      if (!await unchanged(item)) {
-        throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${item.file}`);
+async function verifyPreApplyState(plan, allUpdates, fsOps, phaseMessage) {
+  if (plan.vaultSnapshot instanceof Map) {
+    const currentSnapshot = await snapshotVaultFiles(plan.root, fsOps);
+    for (const [file, snapshotEntry] of plan.vaultSnapshot.entries()) {
+      const current = currentSnapshot.get(file);
+      if (!current || current.content !== snapshotEntry.content) {
+        throw dedupeError('concurrent_change', `${phaseMessage}: ${file}`);
       }
     }
-    for (const item of staged) {
-      await fs.rename(item.temporary, item.edit.absoluteFile);
-      changed.push(item.edit.file);
-      item.temporary = undefined;
+    for (const file of currentSnapshot.keys()) {
+      if (!plan.vaultSnapshot.has(file)) {
+        throw dedupeError('concurrent_change', `${phaseMessage}: ${file}`);
+      }
     }
-    for (const removal of plan.removals) {
-      await fs.unlink(removal.absoluteFile);
-      removed.push(removal.file);
+  }
+  for (const item of [...allUpdates, ...plan.removals]) {
+    if (!await unchanged(item, fsOps)) {
+      throw dedupeError('concurrent_change', `${phaseMessage}: ${item.file}`);
     }
-    return { changed, removed };
-  } catch (error) {
-    const pendingUpdates = allUpdates.map((edit) => edit.file).filter((file) => !changed.includes(file));
-    const pendingRemovals = plan.removals.map((item) => item.file).filter((file) => !removed.includes(file));
-    const detail = (changed.length || removed.length)
-      ? ` Changed: ${changed.join(', ') || 'none'}. Removed: ${removed.join(', ') || 'none'}. Pending: ${[...pendingUpdates, ...pendingRemovals].join(', ') || 'none'}.`
-      : '';
-    if (error instanceof BookmarkDedupeError) {
-      error.message += detail;
-      throw error;
-    }
-    throw dedupeError('write_failed', `Could not apply bookmark deduplication: ${error.message}.${detail}`);
-  } finally {
-    await Promise.all(staged.filter((item) => item.temporary)
-      .map((item) => fs.rm(item.temporary, { force: true })));
   }
 }
 
-export async function dedupeVaultBookmarks(root, { apply = false } = {}) {
-  const plan = await createDedupePlan(root);
-  if (!apply || !plan.groups.length) return { ...plan, applied: false, changed: [], removed: [] };
-  const result = await applyDedupePlan(plan);
-  return { ...plan, applied: true, changed: result.changed, removed: result.removed };
+async function verifyPostApplyState(plan, allUpdates, fsOps) {
+  for (const edit of allUpdates) {
+    let current;
+    try {
+      current = await fsOps.readFile(edit.absoluteFile, 'utf8');
+    } catch {
+      throw dedupeError('concurrent_change', `Vault file missing after apply: ${edit.file}`);
+    }
+    if (current !== edit.content) {
+      throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${edit.file}`);
+    }
+  }
+  for (const removal of plan.removals) {
+    try {
+      await fsOps.stat(removal.absoluteFile);
+      throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${removal.file}`);
+    } catch (error) {
+      if (error instanceof BookmarkDedupeError) throw error;
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  if (plan.vaultSnapshot instanceof Map) {
+    const expected = new Map();
+    for (const [file, entry] of plan.vaultSnapshot.entries()) {
+      expected.set(file, entry.content);
+    }
+    for (const edit of allUpdates) {
+      expected.set(edit.file, edit.content);
+    }
+    for (const removal of plan.removals) {
+      expected.delete(removal.file);
+    }
+    const currentSnapshot = await snapshotVaultFiles(plan.root, fsOps);
+    for (const [file, expectedContent] of expected.entries()) {
+      const current = currentSnapshot.get(file);
+      if (!current || current.content !== expectedContent) {
+        throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${file}`);
+      }
+    }
+    for (const file of currentSnapshot.keys()) {
+      if (!expected.has(file)) {
+        throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${file}`);
+      }
+    }
+  }
+}
+
+async function rollbackDedupeChanges(updatedBackups, removedBackups) {
+  for (const item of [...updatedBackups].reverse()) {
+    let currentOnDisk;
+    try {
+      currentOnDisk = await nativeFs.readFile(item.edit.absoluteFile, 'utf8');
+    } catch {
+      currentOnDisk = undefined;
+    }
+    let restored = item.backupContent;
+    if (currentOnDisk !== undefined && currentOnDisk !== item.edit.content && currentOnDisk !== item.backupContent) {
+      if (currentOnDisk.startsWith(item.edit.content)) {
+        restored = `${item.backupContent}${currentOnDisk.slice(item.edit.content.length)}`;
+      } else {
+        restored = currentOnDisk;
+      }
+    }
+    await nativeFs.writeFile(item.edit.absoluteFile, restored, 'utf8');
+    await nativeFs.rm(item.backupPath, { force: true });
+  }
+  for (const item of [...removedBackups].reverse()) {
+    let currentOnDisk;
+    try {
+      currentOnDisk = await nativeFs.readFile(item.removal.absoluteFile, 'utf8');
+    } catch {
+      currentOnDisk = undefined;
+    }
+    let restored = item.backupContent;
+    if (currentOnDisk !== undefined && currentOnDisk !== item.backupContent) {
+      if (!currentOnDisk.startsWith('---\n')) {
+        restored = `${item.backupContent}${currentOnDisk}`;
+      } else {
+        restored = currentOnDisk;
+      }
+    }
+    await nativeFs.writeFile(item.removal.absoluteFile, restored, 'utf8');
+    await nativeFs.rm(item.backupPath, { force: true });
+  }
+}
+
+export async function applyDedupePlan(plan, { fsOps = fs, lockTimeoutMs } = {}) {
+  return withVaultLock(plan.root, async () => {
+    for (const edit of plan.bookmarkEdits) {
+      validateBookmarkContent(edit.content, edit.file);
+    }
+    for (const edit of plan.projectEdits) {
+      parseAndValidateProjectBookmarkEntries(edit.content, edit.file);
+    }
+
+    const allUpdates = [...plan.bookmarkEdits, ...plan.projectEdits];
+    await verifyPreApplyState(plan, allUpdates, fsOps, 'Vault file changed after preview');
+
+    const staged = [];
+    const updatedBackups = [];
+    const removedBackups = [];
+    const changed = [];
+    const removed = [];
+    try {
+      for (const edit of allUpdates) {
+        const temporary = `${edit.absoluteFile}.dedupe-stage-${process.pid}-${crypto.randomUUID()}.tmp`;
+        const { mode } = await fsOps.stat(edit.absoluteFile);
+        await fsOps.writeFile(temporary, edit.content, { encoding: 'utf8', flag: 'wx', mode });
+        staged.push({ edit, temporary });
+      }
+
+      await verifyPreApplyState(plan, allUpdates, fsOps, 'Vault file changed while applying dedupe');
+
+      for (const item of staged) {
+        const backupPath = `${item.edit.absoluteFile}.dedupe-backup-${process.pid}-${crypto.randomUUID()}.tmp`;
+        await fsOps.rename(item.edit.absoluteFile, backupPath);
+        const backupContent = await nativeFs.readFile(backupPath, 'utf8');
+        updatedBackups.push({ edit: item.edit, backupPath, backupContent });
+        if (backupContent !== item.edit.originalContent) {
+          throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${item.edit.file}`);
+        }
+        await fsOps.rename(item.temporary, item.edit.absoluteFile);
+        item.temporary = undefined;
+        changed.push(item.edit.file);
+      }
+
+      for (const removal of plan.removals) {
+        const backupPath = `${removal.absoluteFile}.dedupe-removed-${process.pid}-${crypto.randomUUID()}.tmp`;
+        await fsOps.rename(removal.absoluteFile, backupPath);
+        const backupContent = await nativeFs.readFile(backupPath, 'utf8');
+        removedBackups.push({ removal, backupPath, backupContent });
+        if (backupContent !== removal.originalContent) {
+          throw dedupeError('concurrent_change', `Vault file changed while applying dedupe: ${removal.file}`);
+        }
+        removed.push(removal.file);
+      }
+
+      await verifyPostApplyState(plan, allUpdates, fsOps);
+
+      for (const item of [...updatedBackups, ...removedBackups]) {
+        await fsOps.unlink(item.backupPath);
+      }
+
+      await verifyPostApplyState(plan, allUpdates, fsOps);
+
+      return { changed, removed };
+    } catch (error) {
+      await rollbackDedupeChanges(updatedBackups, removedBackups);
+      if (error instanceof BookmarkDedupeError) {
+        throw error;
+      }
+      throw dedupeError('write_failed', `Could not apply bookmark deduplication: ${error.message}`);
+    } finally {
+      await Promise.all([
+        ...staged.filter((item) => item.temporary).map((item) => nativeFs.rm(item.temporary, { force: true })),
+        ...updatedBackups.map((item) => nativeFs.rm(item.backupPath, { force: true })),
+        ...removedBackups.map((item) => nativeFs.rm(item.backupPath, { force: true }))
+      ]);
+    }
+  }, { timeoutMs: lockTimeoutMs });
+}
+
+export async function dedupeVaultBookmarks(root, { apply = false, fsOps = fs, lockTimeoutMs } = {}) {
+  if (!apply) {
+    const plan = await createDedupePlan(root, { fsOps });
+    return { ...plan, applied: false, changed: [], removed: [] };
+  }
+  return withVaultLock(root, async () => {
+    const plan = await createDedupePlan(root, { fsOps });
+    if (!plan.groups.length) return { ...plan, applied: false, changed: [], removed: [] };
+    const result = await applyDedupePlan(plan, { fsOps, lockTimeoutMs });
+    return { ...plan, applied: true, changed: result.changed, removed: result.removed };
+  }, { timeoutMs: lockTimeoutMs });
 }

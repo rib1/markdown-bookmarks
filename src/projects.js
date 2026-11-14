@@ -4,6 +4,7 @@ import path from 'node:path';
 import { readList, readScalar, replaceList } from './bookmark-format.js';
 import { listBookmarkFiles } from './vault-bookmark-files.js';
 import { createProjectContent, validateProjectContent, writeProject } from './project-format.js';
+import { withVaultLock } from './vault-lock.js';
 
 function slug(value) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'project';
@@ -80,18 +81,20 @@ export async function resolveProject(reference, root) {
 }
 
 export async function createProject(input, root) {
-  const title = safeText(input.title, 'Project title');
-  const id = input.id || crypto.randomUUID();
-  if (!validId(id)) throw new Error('Project ID must use letters, numbers, and hyphens only');
-  const existing = await projectRecords(root);
-  if (existing.some((project) => project.id === id)) throw new Error(`Project ID already exists: ${id}`);
-  await fs.mkdir(path.join(root, 'projects'), { recursive: true });
-  const file = path.join(root, 'projects', `${id}-${slug(title)}.md`);
-  const contexts = normalizeList(input.contexts);
-  const tags = normalizeList(input.tags).map((tag) => tag.toLowerCase());
-  const content = createProjectContent({ id, title, status: input.status || 'active', contexts, tags, purpose: input.purpose, notes: input.notes });
-  await writeProject(file, content);
-  return { id, title, file };
+  return withVaultLock(root, async () => {
+    const title = safeText(input.title, 'Project title');
+    const id = input.id || crypto.randomUUID();
+    if (!validId(id)) throw new Error('Project ID must use letters, numbers, and hyphens only');
+    const existing = await projectRecords(root);
+    if (existing.some((project) => project.id === id)) throw new Error(`Project ID already exists: ${id}`);
+    await fs.mkdir(path.join(root, 'projects'), { recursive: true });
+    const file = path.join(root, 'projects', `${id}-${slug(title)}.md`);
+    const contexts = normalizeList(input.contexts);
+    const tags = normalizeList(input.tags).map((tag) => tag.toLowerCase());
+    const content = createProjectContent({ id, title, status: input.status || 'active', contexts, tags, purpose: input.purpose, notes: input.notes });
+    await writeProject(file, content);
+    return { id, title, file };
+  });
 }
 
 async function resolveBookmark(reference, root) {
@@ -103,77 +106,87 @@ async function resolveBookmark(reference, root) {
 }
 
 export async function addProjectBookmark(projectReference, bookmarkReference, root, { note } = {}) {
-  const [project, bookmark] = await Promise.all([
-    resolveProject(projectReference, root), resolveBookmark(bookmarkReference, root)
-  ]);
-  const existingIndex = project.bookmarks.findIndex((entry) => entry.id === bookmark.id);
-  const bookmarks = [...project.bookmarks];
-  if (existingIndex < 0) bookmarks.push({ id: bookmark.id, notes: note ? [safeText(note, 'Bookmark note')] : [] });
-  else if (note !== undefined) bookmarks[existingIndex] = {
-    ...bookmarks[existingIndex], notes: [...bookmarks[existingIndex].notes, safeText(note, 'Bookmark note')]
-  };
-  const bookmarkProjects = normalizeList([...readList(bookmark.content, 'projects'), project.id]);
-  const bookmarkContent = replaceList(bookmark.content, 'projects', bookmarkProjects);
-  await writeProject(project.file, project.content, { bookmarks });
-  await fs.writeFile(bookmark.file, bookmarkContent, 'utf8');
-  return { project: project.id, bookmark: bookmark.id, added: existingIndex < 0, noteAdded: existingIndex >= 0 && note !== undefined };
+  return withVaultLock(root, async () => {
+    const [project, bookmark] = await Promise.all([
+      resolveProject(projectReference, root), resolveBookmark(bookmarkReference, root)
+    ]);
+    const existingIndex = project.bookmarks.findIndex((entry) => entry.id === bookmark.id);
+    const bookmarks = [...project.bookmarks];
+    if (existingIndex < 0) bookmarks.push({ id: bookmark.id, notes: note ? [safeText(note, 'Bookmark note')] : [] });
+    else if (note !== undefined) bookmarks[existingIndex] = {
+      ...bookmarks[existingIndex], notes: [...bookmarks[existingIndex].notes, safeText(note, 'Bookmark note')]
+    };
+    const bookmarkProjects = normalizeList([...readList(bookmark.content, 'projects'), project.id]);
+    const bookmarkContent = replaceList(bookmark.content, 'projects', bookmarkProjects);
+    await writeProject(project.file, project.content, { bookmarks });
+    await fs.writeFile(bookmark.file, bookmarkContent, 'utf8');
+    return { project: project.id, bookmark: bookmark.id, added: existingIndex < 0, noteAdded: existingIndex >= 0 && note !== undefined };
+  });
 }
 
 export async function removeProjectBookmark(projectReference, bookmarkReference, root) {
-  const [project, bookmark] = await Promise.all([
-    resolveProject(projectReference, root), resolveBookmark(bookmarkReference, root)
-  ]);
-  const bookmarks = project.bookmarks.filter((entry) => entry.id !== bookmark.id);
-  const projects = readList(bookmark.content, 'projects').filter((id) => id !== project.id);
-  await writeProject(project.file, project.content, { bookmarks });
-  await fs.writeFile(bookmark.file, replaceList(bookmark.content, 'projects', projects), 'utf8');
-  return { project: project.id, bookmark: bookmark.id, removed: bookmarks.length !== project.bookmarks.length };
+  return withVaultLock(root, async () => {
+    const [project, bookmark] = await Promise.all([
+      resolveProject(projectReference, root), resolveBookmark(bookmarkReference, root)
+    ]);
+    const bookmarks = project.bookmarks.filter((entry) => entry.id !== bookmark.id);
+    const projects = readList(bookmark.content, 'projects').filter((id) => id !== project.id);
+    await writeProject(project.file, project.content, { bookmarks });
+    await fs.writeFile(bookmark.file, replaceList(bookmark.content, 'projects', projects), 'utf8');
+    return { project: project.id, bookmark: bookmark.id, removed: bookmarks.length !== project.bookmarks.length };
+  });
 }
 
 export async function addProjectBookmarkNote(projectReference, bookmarkReference, note, root) {
-  const [project, bookmark] = await Promise.all([
-    resolveProject(projectReference, root), resolveBookmark(bookmarkReference, root)
-  ]);
-  const index = project.bookmarks.findIndex((entry) => entry.id === bookmark.id);
-  if (index < 0) throw new Error(`Bookmark ${bookmark.id} is not linked to project ${project.id}`);
-  const bookmarks = [...project.bookmarks];
-  bookmarks[index] = { ...bookmarks[index], notes: [...bookmarks[index].notes, safeText(note, 'Bookmark note')] };
-  await writeProject(project.file, project.content, { bookmarks });
-  return { project: project.id, bookmark: bookmark.id, noteCount: bookmarks[index].notes.length };
+  return withVaultLock(root, async () => {
+    const [project, bookmark] = await Promise.all([
+      resolveProject(projectReference, root), resolveBookmark(bookmarkReference, root)
+    ]);
+    const index = project.bookmarks.findIndex((entry) => entry.id === bookmark.id);
+    if (index < 0) throw new Error(`Bookmark ${bookmark.id} is not linked to project ${project.id}`);
+    const bookmarks = [...project.bookmarks];
+    bookmarks[index] = { ...bookmarks[index], notes: [...bookmarks[index].notes, safeText(note, 'Bookmark note')] };
+    await writeProject(project.file, project.content, { bookmarks });
+    return { project: project.id, bookmark: bookmark.id, noteCount: bookmarks[index].notes.length };
+  });
 }
 
 export async function removeProjectBookmarkNote(projectReference, bookmarkReference, pick, root) {
-  const [project, bookmark] = await Promise.all([
-    resolveProject(projectReference, root), resolveBookmark(bookmarkReference, root)
-  ]);
-  const index = project.bookmarks.findIndex((entry) => entry.id === bookmark.id);
-  if (index < 0) throw new Error(`Bookmark ${bookmark.id} is not linked to project ${project.id}`);
-  const noteIndex = Number(pick);
-  const notes = project.bookmarks[index].notes;
-  if (!Number.isInteger(noteIndex) || noteIndex < 1 || noteIndex > notes.length) {
-    throw new Error(`--pick must be a number from 1 to ${notes.length}`);
-  }
-  const bookmarks = [...project.bookmarks];
-  bookmarks[index] = { ...bookmarks[index], notes: notes.filter((_note, position) => position !== noteIndex - 1) };
-  await writeProject(project.file, project.content, { bookmarks });
-  return { project: project.id, bookmark: bookmark.id, removed: notes[noteIndex - 1] };
+  return withVaultLock(root, async () => {
+    const [project, bookmark] = await Promise.all([
+      resolveProject(projectReference, root), resolveBookmark(bookmarkReference, root)
+    ]);
+    const index = project.bookmarks.findIndex((entry) => entry.id === bookmark.id);
+    if (index < 0) throw new Error(`Bookmark ${bookmark.id} is not linked to project ${project.id}`);
+    const noteIndex = Number(pick);
+    const notes = project.bookmarks[index].notes;
+    if (!Number.isInteger(noteIndex) || noteIndex < 1 || noteIndex > notes.length) {
+      throw new Error(`--pick must be a number from 1 to ${notes.length}`);
+    }
+    const bookmarks = [...project.bookmarks];
+    bookmarks[index] = { ...bookmarks[index], notes: notes.filter((_note, position) => position !== noteIndex - 1) };
+    await writeProject(project.file, project.content, { bookmarks });
+    return { project: project.id, bookmark: bookmark.id, removed: notes[noteIndex - 1] };
+  });
 }
 
 export async function moveProjectBookmark(projectReference, bookmarkReference, position, root) {
-  const project = await resolveProject(projectReference, root);
-  const bookmark = await resolveBookmark(bookmarkReference, root);
-  const index = Number(position);
-  if (!Number.isInteger(index) || index < 1 || index > project.bookmarks.length) {
-    throw new Error(`--to must be a number from 1 to ${project.bookmarks.length}`);
-  }
-  const oldIndex = project.bookmarks.findIndex((entry) => entry.id === bookmark.id);
-  if (oldIndex < 0) throw new Error(`Bookmark ${bookmark.id} is not linked to project ${project.id}`);
-  const bookmarks = [...project.bookmarks];
-  const entry = bookmarks[oldIndex];
-  bookmarks.splice(oldIndex, 1);
-  bookmarks.splice(index - 1, 0, entry);
-  await writeProject(project.file, project.content, { bookmarks });
-  return { project: project.id, bookmark: bookmark.id, position: index };
+  return withVaultLock(root, async () => {
+    const project = await resolveProject(projectReference, root);
+    const bookmark = await resolveBookmark(bookmarkReference, root);
+    const index = Number(position);
+    if (!Number.isInteger(index) || index < 1 || index > project.bookmarks.length) {
+      throw new Error(`--to must be a number from 1 to ${project.bookmarks.length}`);
+    }
+    const oldIndex = project.bookmarks.findIndex((entry) => entry.id === bookmark.id);
+    if (oldIndex < 0) throw new Error(`Bookmark ${bookmark.id} is not linked to project ${project.id}`);
+    const bookmarks = [...project.bookmarks];
+    const entry = bookmarks[oldIndex];
+    bookmarks.splice(oldIndex, 1);
+    bookmarks.splice(index - 1, 0, entry);
+    await writeProject(project.file, project.content, { bookmarks });
+    return { project: project.id, bookmark: bookmark.id, position: index };
+  });
 }
 
 export async function projectBookmarks(projectReference, root) {
