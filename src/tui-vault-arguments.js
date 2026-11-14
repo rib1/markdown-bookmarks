@@ -1,6 +1,6 @@
 import { argumentError, parseTuiArguments } from './tui-arguments.js';
 
-export const VAULT_COMMANDS = Object.freeze(['init', 'skill-install', 'status', 'git-help', 'open', 'tag-lint', 'tag-fix']);
+export const VAULT_COMMANDS = Object.freeze(['init', 'skill-install', 'status', 'git-help', 'open', 'tag-lint', 'tag-fix', 'dedupe']);
 
 export const vaultOptions = {
   '--git': { key: 'git', type: 'boolean' },
@@ -32,11 +32,17 @@ export function parseVaultArguments(args) {
   if (!['init', 'skill-install'].includes(action) && parsed.path) {
     throw argumentError('unsupported_option', '--path is only supported by vault init and vault skill-install');
   }
-  if (action !== 'tag-lint' && parsed.check) {
-    throw argumentError('unsupported_option', '--check is only supported by vault tag-lint');
+  if (!['tag-lint', 'dedupe'].includes(action) && parsed.check) {
+    throw argumentError('unsupported_option', '--check is only supported by vault tag-lint and vault dedupe');
   }
-  if (action !== 'tag-fix' && (parsed.from || parsed.to || parsed.apply)) {
+  if (action !== 'tag-fix' && (parsed.from || parsed.to)) {
     throw argumentError('unsupported_option', '--from, --to, and --apply are only supported by vault tag-fix');
+  }
+  if (!['tag-fix', 'dedupe'].includes(action) && parsed.apply) {
+    throw argumentError('unsupported_option', '--from, --to, and --apply are only supported by vault tag-fix and vault dedupe');
+  }
+  if (action === 'dedupe' && parsed.check && parsed.apply) {
+    throw argumentError('conflicting_options', 'Use either --check or --apply, not both');
   }
   if (action === 'tag-fix' && (!parsed.from || !parsed.to)) {
     throw argumentError('missing_option', 'Usage: npm run bookmark -- vault tag-fix --from TAG --to TAG [--apply]');

@@ -9,7 +9,7 @@ prototype sessions.
       for future invocations without requiring `BOOKMARK_VAULT` every time.
 - [x] Add a simple host wrapper or standalone CLI workflow so users do not need
       to run `docker compose exec ...` for normal use.
-- [ ] Add a `dedupe` command to preview and safely merge existing duplicate
+- [x] Add a `dedupe` command to preview and safely merge existing duplicate
       bookmarks, preserving tags, metadata, notes, and access history.
 - [x] Add CLI tests for `find`, `open`, and time filters, including the new
       content-rich output format.

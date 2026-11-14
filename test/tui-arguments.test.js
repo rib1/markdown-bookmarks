@@ -73,6 +73,12 @@ test('vault command parser follows the shared option contract', () => {
   assert.equal(parseVaultArguments(['--full', 'git-help']).full, true);
   assert.equal(parseVaultArguments(['open', '--dry-run']).dryRun, true);
   assert.equal(parseVaultArguments(['tag-lint', '--full', '--check']).check, true);
+  assert.equal(parseVaultArguments(['dedupe']).action, 'dedupe');
+  assert.equal(parseVaultArguments(['dedupe', '--check']).check, true);
+  assert.equal(parseVaultArguments(['dedupe', '--apply']).apply, true);
+  fails('conflicting_options', () => parseVaultArguments(['dedupe', '--check', '--apply']));
+  fails('unsupported_option', () => parseVaultArguments(['dedupe', '--full']));
+  fails('unsupported_option', () => parseVaultArguments(['dedupe', '--from', 'a']));
   assert.deepEqual(
     { from: parseVaultArguments(['tag-fix', '--from', 'wordpres', '--to=wordpress']).from,
       to: parseVaultArguments(['tag-fix', '--from', 'wordpres', '--to=wordpress']).to },

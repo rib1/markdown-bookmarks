@@ -26,6 +26,7 @@ import { searchCutoff } from './find-query.js';
 import { matchesShortWords, searchMode } from './search-mode.js';
 import { listBookmarkFiles } from './vault-bookmark-files.js';
 import { installVaultLineEndingDefaults } from './vault-git-init.js';
+import { withVaultLock } from './vault-lock.js';
 
 export { vaultRoot } from './vault-path.js';
 
@@ -85,84 +86,86 @@ async function findBookmarkByUrl(url, root) {
 }
 
 export async function saveBookmark(input, root = vaultRoot()) {
-  input = applySitePlugins(input);
-  const now = input.saved_at || new Date().toISOString();
-  const shareEvent = createShareEvent(input, now);
-  const captureEvent = createCaptureEvent(input, now);
-  const id = input.id || crypto.randomUUID();
-  const title = input.title || input.url;
-  const tags = normalizeTags(input.tags);
-  const canonicalUrl = input.canonical_url ? normalizeUrl(input.canonical_url) : normalizeUrl(input.url);
-  const existing = await findBookmarkByUrl(canonicalUrl, root);
-  if (existing) {
-    let content = migrateBookmarkContent(existing.content).content;
-    const oldTags = readList(content, 'tags');
-    const mergedTags = normalizeTags([...oldTags, ...tags]);
-    content = replaceList(content, 'tags', mergedTags);
-    if (input.contexts?.length) {
-      const oldContexts = readList(content, 'contexts');
-      content = replaceList(content, 'contexts', [...new Set([...oldContexts, ...input.contexts])]);
+  return withVaultLock(root, async () => {
+    input = applySitePlugins(input);
+    const now = input.saved_at || new Date().toISOString();
+    const shareEvent = createShareEvent(input, now);
+    const captureEvent = createCaptureEvent(input, now);
+    const id = input.id || crypto.randomUUID();
+    const title = input.title || input.url;
+    const tags = normalizeTags(input.tags);
+    const canonicalUrl = input.canonical_url ? normalizeUrl(input.canonical_url) : normalizeUrl(input.url);
+    const existing = await findBookmarkByUrl(canonicalUrl, root);
+    if (existing) {
+      let content = migrateBookmarkContent(existing.content).content;
+      const oldTags = readList(content, 'tags');
+      const mergedTags = normalizeTags([...oldTags, ...tags]);
+      content = replaceList(content, 'tags', mergedTags);
+      if (input.contexts?.length) {
+        const oldContexts = readList(content, 'contexts');
+        content = replaceList(content, 'contexts', [...new Set([...oldContexts, ...input.contexts])]);
+      }
+      if (shareEvent) {
+        const mergedShares = appendShareEvent(readList(content, 'share_history'), shareEvent);
+        if (mergedShares.added) content = replaceList(content, 'share_history', mergedShares.history);
+      }
+      if (captureEvent) {
+        const mergedCaptures = appendCaptureEvent(readList(content, 'capture_history'), captureEvent);
+        if (mergedCaptures.added) content = replaceList(content, 'capture_history', mergedCaptures.history);
+      }
+      for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'imgur_id', 'space_key', 'page_id', 'issue_key', 'project_key', 'published_at', 'published_at_source', 'published_at_confidence']) {
+        if (input[field]) content = replaceScalar(content, field, input[field]);
+      }
+      content = replaceScalar(content, 'canonical_url', canonicalUrl);
+      content = replaceScalar(content, 'last_saved_at', now);
+      const previousSaveCount = Number(readScalar(content, 'save_count') || 0);
+      let saveHistory = readList(content, 'save_history');
+      if (!saveHistory.length) {
+        const originalSavedAt = content.match(/^saved_at:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
+        saveHistory = originalSavedAt ? [originalSavedAt] : [];
+      }
+      saveHistory.push(now);
+      content = replaceScalar(content, 'save_count', Math.max(previousSaveCount + 1, saveHistory.length));
+      content = replaceList(content, 'save_history', saveHistory);
+      content = replaceScalar(content, 'schema_version', BOOKMARK_SCHEMA_VERSION);
+      await fs.writeFile(existing.file, content, 'utf8');
+      return {
+        id: readScalar(content, 'id'), file: existing.file, title, tags: mergedTags,
+        duplicate: true, share_recorded: Boolean(shareEvent), capture_recorded: Boolean(captureEvent)
+      };
     }
-    if (shareEvent) {
-      const mergedShares = appendShareEvent(readList(content, 'share_history'), shareEvent);
-      if (mergedShares.added) content = replaceList(content, 'share_history', mergedShares.history);
-    }
-    if (captureEvent) {
-      const mergedCaptures = appendCaptureEvent(readList(content, 'capture_history'), captureEvent);
-      if (mergedCaptures.added) content = replaceList(content, 'capture_history', mergedCaptures.history);
-    }
-    for (const field of ['type', 'site', 'repository', 'author', 'video_id', 'imgur_id', 'space_key', 'page_id', 'issue_key', 'project_key', 'published_at', 'published_at_source', 'published_at_confidence']) {
-      if (input[field]) content = replaceScalar(content, field, input[field]);
-    }
-    content = replaceScalar(content, 'canonical_url', canonicalUrl);
-    content = replaceScalar(content, 'last_saved_at', now);
-    const previousSaveCount = Number(readScalar(content, 'save_count') || 0);
-    let saveHistory = readList(content, 'save_history');
-    if (!saveHistory.length) {
-      const originalSavedAt = content.match(/^saved_at:\s*["']?([^"'\r\n]+)["']?\s*$/m)?.[1];
-      saveHistory = originalSavedAt ? [originalSavedAt] : [];
-    }
-    saveHistory.push(now);
-    content = replaceScalar(content, 'save_count', Math.max(previousSaveCount + 1, saveHistory.length));
-    content = replaceList(content, 'save_history', saveHistory);
-    content = replaceScalar(content, 'schema_version', BOOKMARK_SCHEMA_VERSION);
-    await fs.writeFile(existing.file, content, 'utf8');
+    const dir = path.join(root, 'bookmarks', now.slice(0, 7).replace('-', path.sep));
+    await fs.mkdir(dir, { recursive: true });
+    const file = path.join(dir, `${id}-${slug(title)}.md`);
+    const contexts = [...new Set((input.contexts || []).map(String).filter(Boolean))];
+    const metadata = [
+      `---`, `schema_version: ${BOOKMARK_SCHEMA_VERSION}`, `id: ${id}`, `url: ${JSON.stringify(input.url)}`, `canonical_url: ${JSON.stringify(canonicalUrl)}`,
+      `title: ${JSON.stringify(title)}`, `type: ${input.type || 'bookmark'}`, `contexts:`, yamlList(contexts), `tags:`, yamlList(tags),
+      input.site ? `site: ${input.site}` : '',
+      input.repository ? `repository: ${JSON.stringify(input.repository)}` : '',
+      input.video_id ? `video_id: ${JSON.stringify(input.video_id)}` : '',
+      input.imgur_id ? `imgur_id: ${JSON.stringify(input.imgur_id)}` : '',
+      input.space_key ? `space_key: ${JSON.stringify(input.space_key)}` : '',
+      input.page_id ? `page_id: ${JSON.stringify(input.page_id)}` : '',
+      input.issue_key ? `issue_key: ${JSON.stringify(input.issue_key)}` : '',
+      input.project_key ? `project_key: ${JSON.stringify(input.project_key)}` : '',
+      input.author ? `author: ${JSON.stringify(input.author)}` : '',
+      input.published_at ? `published_at: ${input.published_at}` : '',
+      input.published_at_source ? `published_at_source: ${input.published_at_source}` : '',
+      input.published_at_confidence ? `published_at_confidence: ${input.published_at_confidence}` : '',
+      shareEvent ? `share_history:\n${yamlList([shareEvent])}` : '',
+      captureEvent ? `capture_history:\n${yamlList([captureEvent])}` : '',
+      `saved_at: ${now}`, `first_saved_at: ${input.first_saved_at || now}`,
+      `last_saved_at: ${input.last_saved_at || now}`, `save_count: ${input.save_count || 1}`,
+      `save_history:`, yamlList([now]), `---`
+    ].filter(Boolean).join('\n');
+    const body = `${metadata}\n\n## Summary\n\n${input.summary || ''}\n`;
+    await fs.writeFile(file, body, 'utf8');
     return {
-      id: readScalar(content, 'id'), file: existing.file, title, tags: mergedTags,
-      duplicate: true, share_recorded: Boolean(shareEvent), capture_recorded: Boolean(captureEvent)
+      id, file, title, tags,
+      share_recorded: Boolean(shareEvent), capture_recorded: Boolean(captureEvent)
     };
-  }
-  const dir = path.join(root, 'bookmarks', now.slice(0, 7).replace('-', path.sep));
-  await fs.mkdir(dir, { recursive: true });
-  const file = path.join(dir, `${id}-${slug(title)}.md`);
-  const contexts = [...new Set((input.contexts || []).map(String).filter(Boolean))];
-  const metadata = [
-    `---`, `schema_version: ${BOOKMARK_SCHEMA_VERSION}`, `id: ${id}`, `url: ${JSON.stringify(input.url)}`, `canonical_url: ${JSON.stringify(canonicalUrl)}`,
-    `title: ${JSON.stringify(title)}`, `type: ${input.type || 'bookmark'}`, `contexts:`, yamlList(contexts), `tags:`, yamlList(tags),
-    input.site ? `site: ${input.site}` : '',
-    input.repository ? `repository: ${JSON.stringify(input.repository)}` : '',
-    input.video_id ? `video_id: ${JSON.stringify(input.video_id)}` : '',
-    input.imgur_id ? `imgur_id: ${JSON.stringify(input.imgur_id)}` : '',
-    input.space_key ? `space_key: ${JSON.stringify(input.space_key)}` : '',
-    input.page_id ? `page_id: ${JSON.stringify(input.page_id)}` : '',
-    input.issue_key ? `issue_key: ${JSON.stringify(input.issue_key)}` : '',
-    input.project_key ? `project_key: ${JSON.stringify(input.project_key)}` : '',
-    input.author ? `author: ${JSON.stringify(input.author)}` : '',
-    input.published_at ? `published_at: ${input.published_at}` : '',
-    input.published_at_source ? `published_at_source: ${input.published_at_source}` : '',
-    input.published_at_confidence ? `published_at_confidence: ${input.published_at_confidence}` : '',
-    shareEvent ? `share_history:\n${yamlList([shareEvent])}` : '',
-    captureEvent ? `capture_history:\n${yamlList([captureEvent])}` : '',
-    `saved_at: ${now}`, `first_saved_at: ${input.first_saved_at || now}`,
-    `last_saved_at: ${input.last_saved_at || now}`, `save_count: ${input.save_count || 1}`,
-    `save_history:`, yamlList([now]), `---`
-  ].filter(Boolean).join('\n');
-  const body = `${metadata}\n\n## Summary\n\n${input.summary || ''}\n`;
-  await fs.writeFile(file, body, 'utf8');
-  return {
-    id, file, title, tags,
-    share_recorded: Boolean(shareEvent), capture_recorded: Boolean(captureEvent)
-  };
+  });
 }
 
 function savedAfter(content, cutoff) {

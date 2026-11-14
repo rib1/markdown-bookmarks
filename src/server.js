@@ -9,6 +9,7 @@ import { BOOKMARK_SCHEMA_VERSION, migrateVault } from './migrations/index.js';
 import { cleanupStaleSearchResultPages } from './search-results-page.js';
 import { saveBookmark, vaultRoot } from './vault.js';
 import { addProjectBookmark, listProjects, resolveProject } from './projects.js';
+import { withVaultLock } from './vault-lock.js';
 
 const port = Number(process.env.PORT || 8787);
 const vault = vaultRoot();
@@ -42,11 +43,14 @@ const server = http.createServer(async (request, response) => {
     try {
       const parsed = parseBrowserSaveRequest(JSON.parse(raw));
       const { project_id: projectId, ...bookmark } = parsed.bookmark;
-      if (projectId) await resolveProject(projectId, vault);
-      const result = await saveBookmark({ ...bookmark, capture_client: parsed.client }, vault);
-      const project = projectId
-        ? await addProjectBookmark(projectId, result.id, vault)
-        : undefined;
+      const { result, project } = await withVaultLock(vault, async () => {
+        if (projectId) await resolveProject(projectId, vault);
+        const savedResult = await saveBookmark({ ...bookmark, capture_client: parsed.client }, vault);
+        const linkedProject = projectId
+          ? await addProjectBookmark(projectId, savedResult.id, vault)
+          : undefined;
+        return { result: savedResult, project: linkedProject };
+      });
       const body = {
         ok: !parsed.legacyClient,
         saved: true,

@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { normalizeTags, readList, readScalar, replaceList } from './bookmark-format.js';
 import { findLikelyTagTypos, levenshteinDistance, tagDistanceLimit } from './tag-lint.js';
 import { listBookmarkFiles, relativeVaultPath } from './vault-bookmark-files.js';
+import { withVaultLock } from './vault-lock.js';
 
 export class TagMaintenanceError extends Error {
   constructor(code, message) {
@@ -80,44 +81,46 @@ async function unchanged(edit) {
 }
 
 export async function applyTagFixPlan(plan) {
-  for (const edit of plan.edits) {
-    if (!await unchanged(edit)) {
-      throw maintenanceError('concurrent_change', `Bookmark changed after preview: ${edit.file}`);
-    }
-  }
-
-  const staged = [];
-  const changed = [];
-  try {
+  return withVaultLock(plan.root, async () => {
     for (const edit of plan.edits) {
-      const temporary = `${edit.absoluteFile}.tag-fix-${process.pid}-${crypto.randomUUID()}.tmp`;
-      const { mode } = await fs.stat(edit.absoluteFile);
-      await fs.writeFile(temporary, edit.content, { encoding: 'utf8', flag: 'wx', mode });
-      staged.push({ edit, temporary });
-    }
-    for (const item of staged) {
-      if (!await unchanged(item.edit)) {
-        throw maintenanceError('concurrent_change', `Bookmark changed while applying fix: ${item.edit.file}`);
+      if (!await unchanged(edit)) {
+        throw maintenanceError('concurrent_change', `Bookmark changed after preview: ${edit.file}`);
       }
-      await fs.rename(item.temporary, item.edit.absoluteFile);
-      changed.push(item.edit.file);
-      item.temporary = undefined;
     }
-    return { changed };
-  } catch (error) {
-    const pending = plan.edits.map((edit) => edit.file).filter((file) => !changed.includes(file));
-    const detail = changed.length
-      ? ` Changed: ${changed.join(', ')}. Not changed: ${pending.join(', ')}.`
-      : '';
-    if (error instanceof TagMaintenanceError) {
-      error.message += detail;
-      throw error;
+
+    const staged = [];
+    const changed = [];
+    try {
+      for (const edit of plan.edits) {
+        const temporary = `${edit.absoluteFile}.tag-fix-${process.pid}-${crypto.randomUUID()}.tmp`;
+        const { mode } = await fs.stat(edit.absoluteFile);
+        await fs.writeFile(temporary, edit.content, { encoding: 'utf8', flag: 'wx', mode });
+        staged.push({ edit, temporary });
+      }
+      for (const item of staged) {
+        if (!await unchanged(item.edit)) {
+          throw maintenanceError('concurrent_change', `Bookmark changed while applying fix: ${item.edit.file}`);
+        }
+        await fs.rename(item.temporary, item.edit.absoluteFile);
+        changed.push(item.edit.file);
+        item.temporary = undefined;
+      }
+      return { changed };
+    } catch (error) {
+      const pending = plan.edits.map((edit) => edit.file).filter((file) => !changed.includes(file));
+      const detail = changed.length
+        ? ` Changed: ${changed.join(', ')}. Not changed: ${pending.join(', ')}.`
+        : '';
+      if (error instanceof TagMaintenanceError) {
+        error.message += detail;
+        throw error;
+      }
+      throw maintenanceError('write_failed', `Could not apply tag fix: ${error.message}.${detail}`);
+    } finally {
+      await Promise.all(staged.filter((item) => item.temporary)
+        .map((item) => fs.rm(item.temporary, { force: true })));
     }
-    throw maintenanceError('write_failed', `Could not apply tag fix: ${error.message}.${detail}`);
-  } finally {
-    await Promise.all(staged.filter((item) => item.temporary)
-      .map((item) => fs.rm(item.temporary, { force: true })));
-  }
+  });
 }
 
 export async function fixVaultTags(root, { from, to, apply = false }) {
